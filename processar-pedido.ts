@@ -1,9 +1,23 @@
 import {DynamoDB ,S3} from "aws-sdk";
 import { gerarPDF } from "./gerarPDF";
 import { execSync } from "node:child_process";
-const ETH0_IP = execSync("ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
-const docClient = new DynamoDB.DocumentClient({ endpoint: `http://${ETH0_IP}:4566` });
-const s3 = new S3({ endpoint: `http://${ETH0_IP}:4566` });
+
+// Obter IP da interface eth0 dinamicamente
+const getEth0IP = () => {
+  try {
+    const ip = execSync("ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
+    return ip || 'localhost';
+  } catch (error) {
+    console.warn('Erro ao obter IP da eth0, usando localhost:', error);
+    return 'localhost';
+  }
+};
+
+const ETH0_IP = getEth0IP();
+const ENDPOINT = `http://${ETH0_IP}:4566`;
+
+const docClient = new DynamoDB.DocumentClient({ endpoint: ENDPOINT });
+const s3 = new S3({ endpoint: ENDPOINT });
 
 interface SQSRecord {
 	body: string;

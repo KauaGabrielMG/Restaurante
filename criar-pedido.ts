@@ -2,9 +2,22 @@ import {DynamoDB, SQS} from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'node:child_process';
 
-const ETH0_IP = execSync("ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
-const dynamodb = new DynamoDB.DocumentClient({ endpoint: `http://${ETH0_IP}:4566` });
-const sqs = new SQS({ endpoint: `http://${ETH0_IP}:4566` });
+// Obter IP da interface eth0 dinamicamente
+const getEth0IP = () => {
+  try {
+    const ip = execSync("ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
+    return ip || 'localhost';
+  } catch (error) {
+    console.warn('Erro ao obter IP da eth0, usando localhost:', error);
+    return 'localhost';
+  }
+};
+
+const ETH0_IP = getEth0IP();
+const ENDPOINT = `http://${ETH0_IP}:4566`;
+
+const dynamodb = new DynamoDB.DocumentClient({ endpoint: ENDPOINT });
+const sqs = new SQS({ endpoint: ENDPOINT });
 
 interface PedidoData {
   cliente: string;
@@ -93,12 +106,10 @@ export default async function handler(event: APIGatewayEvent) {
           mensagem: 'Falha ao salvar pedido no banco de dados'
         }),
       };
-    }
-
-    // Enviar mensagem para SQS com tratamento de erro
+    }    // Enviar mensagem para SQS com tratamento de erro
     try {
       await sqs.sendMessage({
-        QueueUrl: 'http://localhost:4566/000000000000/fila-pedidos',
+        QueueUrl: `http://${ETH0_IP}:4566/000000000000/fila-pedidos`,
         MessageBody: JSON.stringify({ id, timestamp: new Date().toISOString() })
       }).promise();
     } catch (sqsError) {

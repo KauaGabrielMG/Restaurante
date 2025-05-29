@@ -1,13 +1,65 @@
 #!/bin/bash
 
 set -e
-# docker run --rm -it -p 4566:4566 -p 4510-4559:4510-4559 localstack/localstack
+
+# Função para tratamento de erros
+handle_error() {
+    echo "❌ Erro na linha $1: $2"
+    echo "🧹 Limpando recursos criados parcialmente..."
+    cleanup_on_error
+    exit 1
+}
+
+# Função para limpeza em caso de erro
+cleanup_on_error() {
+    echo "🧼 Removendo artefatos criados..."
+    rm -f criarPedido.zip processarPedido.zip
+    rm -f criar-pedido.js processar-pedido.js gerarPDF.js
+
+    if [ ! -z "$LOCALSTACK_ENDPOINT" ]; then
+        echo "🗑️ Tentando remover recursos AWS criados..."
+        aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb delete-table --table-name Pedidos 2>/dev/null || true
+        aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs delete-queue --queue-url "http://$ETH0_IP:4566/000000000000/fila-pedidos" 2>/dev/null || true
+        aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rb s3://comprovantes --force 2>/dev/null || true
+        if [ ! -z "$API_ID" ]; then
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway delete-rest-api --rest-api-id "$API_ID" 2>/dev/null || true
+        fi
+    fi
+}
+
+# Configurar trap para capturar erros
+trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
+
+echo "🚀 Iniciando deploy do Sistema de Restaurante..."
+
+# Verificar se o LocalStack está rodando
+echo "🔍 Verificando se o LocalStack está rodando..."
+if ! docker ps | grep -q localstack; then
+    echo "❌ LocalStack não está rodando!"
+    echo "💡 Execute primeiro: docker compose up -d"
+    exit 1
+fi
+
+echo "📦 Instalando dependências..."
+if ! npm install; then
+    echo "❌ Falha ao instalar dependências npm"
+    exit 1
+fi
+
+echo "🏗️ Executando build do projeto..."
+if ! npm run build; then
+    echo "❌ Falha no build do projeto"
+    exit 1
+fi
+
 # Obter IP da interface eth0
+echo "🌐 Obtendo IP da interface eth0..."
 ETH0_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1)
 
 if [ -z "$ETH0_IP" ]; then
   echo "❌ Não foi possível obter o IP da interface eth0"
-  exit 1
+  echo "💡 Tentando usar localhost como fallback..."
+  ETH0_IP="localhost"
 fi
 
 echo "🌐 Usando IP da eth0: $ETH0_IP"
@@ -128,6 +180,6 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-event-source-mapping \
 echo ""
 echo "🎉 DEPLOY CONCLUÍDO COM SUCESSO!"
 echo "🔗 Endpoint disponível:"
-echo "POST http://localhost:4566/restapis/$API_ID/local/_user_request_/pedidos"
+echo "POST http://$ETH0_IP:4566/restapis/$API_ID/local/_user_request_/pedidos"
 echo "Use o arquivo 'evento-exemplo.json' com curl ou Postman para testar."
-echo "exemplo: curl -X POST http://localhost:4566/restapis/$API_ID/local/_user_request_/pedidos -d @evento-exemplo.json -H 'Content-Type: application/json'"
+echo "exemplo: curl -X POST http://$ETH0_IP:4566/restapis/$API_ID/local/_user_request_/pedidos -d @evento-exemplo.json -H 'Content-Type: application/json'"
