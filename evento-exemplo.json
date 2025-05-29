@@ -1,0 +1,21 @@
+{
+  "cliente": "João Silva",
+  "mesa": 5,
+  "itens": [
+    {
+      "nome": "Hambúrguer Artesanal",
+      "quantidade": 2,
+      "preco": 25.90
+    },
+    {
+      "nome": "Batata Frita Especial",
+      "quantidade": 1,
+      "preco": 12.50
+    },
+    {
+      "nome": "Refrigerante",
+      "quantidade": 2,
+      "preco": 5.00
+    }
+  ]
+}

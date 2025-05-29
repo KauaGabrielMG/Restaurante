@@ -1,0 +1,8 @@
+{
+  "cliente": "João Silva",
+  "mesa": 5,
+  "itens": [
+    {"nome": "Hambúrguer", "quantidade": 2, "preco": 25.90},
+    {"nome": "Batata Frita", "quantidade": 1, "preco": 12.50}
+  ]
+}
