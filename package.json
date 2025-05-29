@@ -1,0 +1,26 @@
+{
+  "name": "restaurante",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "type": "commonjs",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "start": "node main.js --port=3000",
+    "start:dev": "nodemon main.js --port=3000",
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@aws-sdk/types": "^3.804.0",
+    "aws-sdk": "^2.1692.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/aws-sdk": "^0.0.42",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.8.3"
+  }
+}
