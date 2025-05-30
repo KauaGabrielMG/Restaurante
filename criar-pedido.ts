@@ -2,7 +2,7 @@ import {DynamoDB, SQS} from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
 // Usar endpoint fixo para evitar problemas na Lambda
-const ETH0_IP = process.env.ETH0_IP || '192.168.10.100';
+const ETH0_IP = process.env.ETH0_IP || '172.29.30.139';
 const ENDPOINT = `http://${ETH0_IP}:4566`;
 
 const dynamodb = new DynamoDB.DocumentClient({ endpoint: ENDPOINT });

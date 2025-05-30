@@ -5,11 +5,11 @@ import { execSync } from "node:child_process";
 // Obter IP da interface eth0 dinamicamente
 const getEth0IP = () => {
   try {
-    const ip = execSync("ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
-    return ip || 'localhost';
+    const ip = execSync("ip addr show eth1 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
+    return ip || '172.29.30.139';
   } catch (error) {
-    console.warn('Erro ao obter IP da eth0, usando localhost:', error);
-    return 'localhost';
+    console.warn('Erro ao obter IP da eth0, usando 172.29.30.139:', error);
+    return '172.29.30.139';
   }
 };
 
