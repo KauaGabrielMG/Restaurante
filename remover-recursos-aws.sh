@@ -49,7 +49,7 @@ if [ ! -z "$LAMBDA_FUNCTIONS" ]; then
     for func in $LAMBDA_FUNCTIONS; do
         if [[ "$func" == "CriarPedido" ]] || [[ "$func" == "ProcessarPedido" ]]; then
             echo "  🗑️ Removendo função Lambda: $func"
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda delete-function --function-name "$func" 2>/dev/null || true
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda delete-function --function-name "$func" > /dev/null 2>&1 || true
         fi
     done
 else
@@ -64,7 +64,7 @@ if [ ! -z "$API_IDS" ]; then
     for api_id in $API_IDS; do
         if [ "$api_id" != "None" ] && [ ! -z "$api_id" ]; then
             echo "  🗑️ Removendo API Gateway: $api_id"
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway delete-rest-api --rest-api-id "$api_id" 2>/dev/null || true
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway delete-rest-api --rest-api-id "$api_id" > /dev/null 2>&1 || true
         fi
     done
 else
@@ -79,7 +79,7 @@ if [ ! -z "$TABLES" ]; then
     for table in $TABLES; do
         if [[ "$table" == "Pedidos" ]]; then
             echo "  🗑️ Removendo tabela DynamoDB: $table"
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb delete-table --table-name "$table" 2>/dev/null || true
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb delete-table --table-name "$table" > /dev/null 2>&1 || true
         fi
     done
 else
@@ -93,8 +93,8 @@ QUEUES=$(aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs list-queues --query 'QueueU
 if [ ! -z "$QUEUES" ]; then
     for queue_url in $QUEUES; do
         if [[ "$queue_url" == *"fila-pedidos"* ]]; then
-            echo "  🗑️ Removendo fila SQS: $queue_url"
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs delete-queue --queue-url "$queue_url" 2>/dev/null || true
+            echo "  🗑️ Removendo fila SQS: fila-pedidos"
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs delete-queue --queue-url "$queue_url" > /dev/null 2>&1 || true
         fi
     done
 else
@@ -110,9 +110,9 @@ if [ ! -z "$BUCKETS" ]; then
         if [[ "$bucket" == "comprovantes" ]]; then
             echo "  🗑️ Removendo bucket S3: $bucket"
             # Primeiro remover todos os objetos do bucket
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rm s3://"$bucket" --recursive 2>/dev/null || true
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rm s3://"$bucket" --recursive > /dev/null 2>&1 || true
             # Depois remover o bucket
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rb s3://"$bucket" 2>/dev/null || true
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rb s3://"$bucket" > /dev/null 2>&1 || true
         fi
     done
 else
@@ -127,7 +127,7 @@ if [ ! -z "$EVENT_MAPPINGS" ]; then
     for mapping_uuid in $EVENT_MAPPINGS; do
         if [ "$mapping_uuid" != "None" ] && [ ! -z "$mapping_uuid" ]; then
             echo "  🗑️ Removendo mapeamento: $mapping_uuid"
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda delete-event-source-mapping --uuid "$mapping_uuid" 2>/dev/null || true
+            aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda delete-event-source-mapping --uuid "$mapping_uuid" > /dev/null 2>&1 || true
         fi
     done
 else

@@ -1,19 +1,8 @@
 import {DynamoDB, SQS} from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
-import { execSync } from 'node:child_process';
 
-// Obter IP da interface eth0 dinamicamente
-const getEth0IP = () => {
-  try {
-    const ip = execSync("ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1", { encoding: 'utf8' }).trim();
-    return ip || 'localhost';
-  } catch (error) {
-    console.warn('Erro ao obter IP da eth0, usando localhost:', error);
-    return 'localhost';
-  }
-};
-
-const ETH0_IP = getEth0IP();
+// Usar endpoint fixo para evitar problemas na Lambda
+const ETH0_IP = process.env.ETH0_IP || '192.168.10.100';
 const ENDPOINT = `http://${ETH0_IP}:4566`;
 
 const dynamodb = new DynamoDB.DocumentClient({ endpoint: ENDPOINT });
@@ -33,8 +22,11 @@ interface APIGatewayEvent {
   queryStringParameters?: { [key: string]: string } | null;
 }
 
-export default async function handler(event: APIGatewayEvent) {
+// Export nomeado para compatibilidade com Lambda
+export const handler = async (event: APIGatewayEvent) => {
   try {
+    console.log('Event received:', JSON.stringify(event, null, 2));
+
     // Validação básica do evento
     if (!event || !event.body) {
       return {
@@ -135,8 +127,7 @@ export default async function handler(event: APIGatewayEvent) {
     };
 
   } catch (error) {
-    console.error('Erro inesperado:', error);
-    return {
+    console.error('Erro inesperado:', error);    return {
       statusCode: 500,
       body: JSON.stringify({
         erro: 'Erro interno do servidor',

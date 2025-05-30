@@ -1,0 +1,8 @@
+{
+  "body": "{\"cliente\":\"Teste\",\"mesa\":1,\"itens\":[{\"nome\":\"Item\",\"quantidade\":1,\"preco\":10}]}",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "httpMethod": "POST",
+  "path": "/pedidos"
+}

@@ -44,11 +44,13 @@ interface Pedido {
 	atualizadoEm?: string;
 }
 
-export default async function handler(event: SQSEvent) {
+export const handler = async (event: SQSEvent) => {
 	const processedRecords: string[] = [];
 	const failedRecords: string[] = [];
 
 	try {
+		console.log('SQS Event received:', JSON.stringify(event, null, 2));
+
 		// Validação básica do evento
 		if (!event || !event.Records || !Array.isArray(event.Records)) {
 			console.error('Evento SQS inválido:', event);
