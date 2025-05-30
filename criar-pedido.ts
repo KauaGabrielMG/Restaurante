@@ -1,12 +1,22 @@
 import {DynamoDB, SQS} from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
-// Usar endpoint fixo para evitar problemas na Lambda
-const ETH0_IP = process.env.ETH0_IP || '192.168.10.100';
+// Usar endpoint correto para LocalStack
+const ETH0_IP = process.env.ETH0_IP || '172.19.175.97';
 const ENDPOINT = `http://${ETH0_IP}:4566`;
 
-const dynamodb = new DynamoDB.DocumentClient({ endpoint: ENDPOINT });
-const sqs = new SQS({ endpoint: ENDPOINT });
+const dynamodb = new DynamoDB.DocumentClient({ 
+  endpoint: ENDPOINT,
+  region: 'us-east-1',
+  accessKeyId: 'test',
+  secretAccessKey: 'test'
+});
+const sqs = new SQS({ 
+  endpoint: ENDPOINT,
+  region: 'us-east-1',
+  accessKeyId: 'test',
+  secretAccessKey: 'test'
+});
 
 interface PedidoData {
   cliente: string;
@@ -25,6 +35,7 @@ interface APIGatewayEvent {
 // Export nomeado para compatibilidade com Lambda
 export const handler = async (event: APIGatewayEvent) => {
   try {
+    console.log('Lambda iniciada. Endpoint:', ENDPOINT);
     console.log('Event received:', JSON.stringify(event, null, 2));
 
     // Validação básica do evento
@@ -74,10 +85,9 @@ export const handler = async (event: APIGatewayEvent) => {
       };
     }
 
-    const id = uuidv4();
-
-    // Salvar no DynamoDB com tratamento de erro
+    const id = uuidv4();    // Salvar no DynamoDB com tratamento de erro
     try {
+      console.log('Tentando salvar no DynamoDB...');
       await dynamodb.put({
         TableName: 'Pedidos',
         Item: {
@@ -89,6 +99,7 @@ export const handler = async (event: APIGatewayEvent) => {
           criadoEm: new Date().toISOString(),
         },
       }).promise();
+      console.log('Salvo no DynamoDB com sucesso');
     } catch (dynamoError) {
       console.error('Erro ao salvar no DynamoDB:', dynamoError);
       return {
@@ -100,10 +111,12 @@ export const handler = async (event: APIGatewayEvent) => {
       };
     }    // Enviar mensagem para SQS com tratamento de erro
     try {
+      console.log('Tentando enviar para SQS...');
       await sqs.sendMessage({
         QueueUrl: `http://${ETH0_IP}:4566/000000000000/fila-pedidos`,
         MessageBody: JSON.stringify({ id, timestamp: new Date().toISOString() })
       }).promise();
+      console.log('Enviado para SQS com sucesso');
     } catch (sqsError) {
       console.error('Erro ao enviar para SQS:', sqsError);
       // Aqui você pode decidir se quer reverter a operação do DynamoDB

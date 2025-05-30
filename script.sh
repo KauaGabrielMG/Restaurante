@@ -106,7 +106,7 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-function \
   --runtime nodejs18.x \
   --handler criar-pedido.handler \
   --zip-file fileb://criarPedido.zip \
-  --role arn:aws:iam::000000000000:role/lambda-role > /dev/null 2>&1
+  --role arn:aws:iam::000000000000:role/lambda-role
 
 echo "  🔧 Criando função ProcessarPedido"
 aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-function \
@@ -114,7 +114,7 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-function \
   --runtime nodejs18.x \
   --handler processar-pedido.handler \
   --zip-file fileb://processarPedido.zip \
-  --role arn:aws:iam::000000000000:role/lambda-role > /dev/null 2>&1
+  --role arn:aws:iam::000000000000:role/lambda-role
 
 echo "🌐 Criando API Gateway e integrando com Lambda CriarPedido..."
 
@@ -155,11 +155,11 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda add-permission \
   --statement-id apigateway-test-permission \
   --action lambda:InvokeFunction \
   --principal apigateway.amazonaws.com \
-  --source-arn "arn:aws:execute-api:us-east-1:000000000000:$API_ID/*/POST/pedidos" > /dev/null 2>&1
+  --source-arn "arn:aws:execute-api:us-east-1:000000000000:$API_ID/*/POST/pedidos"
 
 aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway create-deployment \
   --rest-api-id "$API_ID" \
-  --stage-name local > /dev/null 2>&1
+  --stage-name local
 
 echo "🔗 Conectando SQS com Lambda ProcessarPedido..."
 
@@ -174,7 +174,7 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-event-source-mapping \
   --function-name ProcessarPedido \
   --event-source-arn "$QUEUE_ARN" \
   --batch-size 1 \
-  --enabled > /dev/null 2>&1
+  --enabled
 
 echo ""
 echo "🎉 DEPLOY CONCLUÍDO COM SUCESSO!"
