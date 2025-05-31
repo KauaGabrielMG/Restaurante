@@ -1,0 +1,15 @@
+graph LR
+    Cliente[Cliente] --> APIGateway[API Gateway]
+    APIGateway --> LambdaCriarPedido[Lambda CriarPedido]
+    LambdaCriarPedido --> DynamoDB[(DynamoDB)]
+    LambdaCriarPedido --> SQS[SQS Fila]
+    SQS --> LambdaProcessarPedido[Lambda ProcessarPedido]
+    LambdaProcessarPedido --> S3[(S3 Bucket)]
+    LambdaProcessarPedido --> SNS[SNS Topic]
+    LambdaProcessarPedido --> DynamoDB
+    SNS --> NotificacaoCliente[📧 Cliente]
+    SNS --> NotificacaoCozinha[📧 Cozinha]
+
+    style SNS fill:#ff9999
+    style NotificacaoCliente fill:#ccffcc
+    style NotificacaoCozinha fill:#ccffcc

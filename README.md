@@ -8,6 +8,7 @@
 ✅ **BANCO DE DADOS** - DynamoDB salvando pedidos
 ✅ **FILA FUNCIONANDO** - SQS processando mensagens
 ✅ **PDFs GERADOS** - S3 armazenando comprovantes
+✅ **NOTIFICAÇÕES ATIVAS** - SNS enviando alertas de pedidos prontos
 
 ### 🚀 **Como usar AGORA:**
 
@@ -28,14 +29,14 @@ chmod +x status-sistema.sh
 
 ---
 
-Um sistema completo de gerenciamento de pedidos para restaurantes, desenvolvido com arquitetura serverless usando AWS Lambda, DynamoDB, SQS e S3, executando localmente com LocalStack.
+Um sistema completo de gerenciamento de pedidos para restaurantes, desenvolvido com arquitetura serverless usando AWS Lambda, DynamoDB, SQS, S3 e SNS, executando localmente com LocalStack.
 
 ## 🏗️ Arquitetura
 
 ```
 Cliente → API Gateway → Lambda (CriarPedido) → DynamoDB + SQS
                                                     ↓
-                                        Lambda (ProcessarPedido) → S3 (PDF)
+                                        Lambda (ProcessarPedido) → S3 (PDF) + SNS (Notificação)
                                                     ↓
                                               DynamoDB (Status)
 ```
@@ -46,8 +47,9 @@ Cliente → API Gateway → Lambda (CriarPedido) → DynamoDB + SQS
 - **Lambda CriarPedido**: Valida dados, salva pedidos no DynamoDB e envia para fila SQS
 - **DynamoDB**: Armazena dados completos dos pedidos com status
 - **SQS**: Fila para processamento assíncrono de pedidos
-- **Lambda ProcessarPedido**: Processa pedidos, gera comprovantes PDF e salva no S3
+- **Lambda ProcessarPedido**: Processa pedidos, gera comprovantes PDF, salva no S3 e envia notificações
 - **S3**: Armazena comprovantes em PDF dos pedidos processados
+- **SNS**: Envia notificações quando pedidos são concluídos (simulando alertas para clientes e cozinha)
 
 ## 🚀 Pré-requisitos
 
@@ -145,9 +147,11 @@ O script executará automaticamente:
 - ✅ Criar tabela DynamoDB "Pedidos"
 - ✅ Criar fila SQS "fila-pedidos"
 - ✅ Criar bucket S3 "comprovantes"
+- ✅ Criar tópico SNS "PedidosConcluidos"
 - ✅ Deploy das funções Lambda
 - ✅ Configurar API Gateway
 - ✅ Conectar SQS com Lambda
+- ✅ Configurar permissões SNS
 
 ### 4. Verificar Deploy
 
@@ -157,6 +161,7 @@ Após o deploy bem-sucedido, você verá:
 🎉 DEPLOY CONCLUÍDO COM SUCESSO!
 🔗 Endpoint disponível:
 POST http://172.x.x.x:4566/restapis/xxxxxxxxxx/local/_user_request_/pedidos
+📧 Tópico SNS: arn:aws:sns:us-east-1:000000000000:PedidosConcluidos
 ```
 
 ## 🚀 Teste Rápido Automatizado
@@ -179,6 +184,7 @@ O script de teste irá:
 - ✅ Testar validação de erro
 - ✅ Verificar se dados foram salvos no DynamoDB
 - ✅ Validar se todos os recursos AWS foram criados
+- ✅ Verificar se notificações SNS foram enviadas
 
 ## 📋 Checklist de Validação
 
@@ -188,6 +194,7 @@ Após executar `./script.sh`, verifique:
 - [ ] Tabela DynamoDB criada: `aws --endpoint-url=http://IP:4566 dynamodb list-tables`
 - [ ] Fila SQS criada: `aws --endpoint-url=http://IP:4566 sqs list-queues`
 - [ ] Bucket S3 criado: `aws --endpoint-url=http://IP:4566 s3 ls`
+- [ ] Tópico SNS criado: `aws --endpoint-url=http://IP:4566 sns list-topics`
 - [ ] Lambdas deployadas: `aws --endpoint-url=http://IP:4566 lambda list-functions`
 - [ ] API Gateway funcionando: teste com curl ou Postman
 
@@ -284,6 +291,9 @@ aws --endpoint-url=$AWS_ENDPOINT_URL sqs list-queues
 # Listar buckets S3
 aws --endpoint-url=$AWS_ENDPOINT_URL s3 ls
 
+# Verificar tópicos SNS
+aws --endpoint-url=$AWS_ENDPOINT_URL sns list-topics
+
 # Verificar funções Lambda
 aws --endpoint-url=$AWS_ENDPOINT_URL lambda list-functions
 ```
@@ -310,6 +320,28 @@ aws --endpoint-url=$AWS_ENDPOINT_URL s3 ls s3://comprovantes/
 aws --endpoint-url=$AWS_ENDPOINT_URL s3 cp s3://comprovantes/SEU_PEDIDO_ID.pdf ./comprovante.pdf
 ```
 
+### Verificar Notificações SNS
+
+```bash
+# Listar mensagens publicadas no tópico SNS (simulação)
+# No LocalStack, as mensagens ficam disponíveis nos logs
+docker compose logs localstack | grep -i "sns.*pedidosconcluidos"
+
+# Verificar tópico SNS existente
+aws --endpoint-url=$AWS_ENDPOINT_URL sns get-topic-attributes \
+  --topic-arn arn:aws:sns:us-east-1:000000000000:PedidosConcluidos
+```
+
+**Exemplo de Notificação SNS:**
+
+```json
+{
+  "TopicArn": "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos",
+  "Message": "Pedido 550e8400-e29b-41d4-a716-446655440000 foi processado e está pronto! Cliente: João Silva, Mesa: 5, Total: R$ 64,30",
+  "Subject": "🍽️ Pedido Pronto para Retirada!"
+}
+```
+
 ### Monitorar Logs das Lambdas
 
 ```bash
@@ -318,6 +350,9 @@ aws --endpoint-url=$AWS_ENDPOINT_URL logs describe-log-groups
 
 # Ver logs da função ProcessarPedido
 docker compose logs localstack | grep -i lambda
+
+# Ver logs específicos de SNS
+docker compose logs localstack | grep -i sns
 ```
 
 ## 🔍 Troubleshooting
@@ -370,6 +405,19 @@ tsc criar-pedido.ts processar-pedido.ts gerarPDF.ts
 ./script.sh
 ```
 
+#### 5. Notificações SNS não funcionam
+
+```bash
+# Verificar se o tópico foi criado
+aws --endpoint-url=$AWS_ENDPOINT_URL sns list-topics
+
+# Verificar permissões da Lambda para SNS
+aws --endpoint-url=$AWS_ENDPOINT_URL lambda get-policy --function-name ProcessarPedido
+
+# Verificar logs específicos
+docker compose logs localstack | grep "SNS\|sns"
+```
+
 ## 🗑️ Limpeza do Ambiente
 
 ### Remover Recursos AWS
@@ -396,7 +444,7 @@ Restaurante/
 ├── docker-compose.yml      # Configuração LocalStack
 ├── script.sh              # Script de deploy automatizado
 ├── criar-pedido.ts         # Lambda para criar pedidos
-├── processar-pedido.ts     # Lambda para processar pedidos
+├── processar-pedido.ts     # Lambda para processar pedidos + SNS
 ├── gerarPDF.ts            # Função para gerar PDFs
 ├── package.json           # Dependências Node.js
 ├── tsconfig.json          # Configuração TypeScript
@@ -418,8 +466,17 @@ Restaurante/
 - Consumo automático da fila SQS
 - Geração de comprovantes em PDF
 - Upload para S3
+- Envio de notificações via SNS
 - Atualização de status no DynamoDB
 - Processamento em lote com controle de falhas
+
+### 📧 Sistema de Notificações
+
+- Tópico SNS "PedidosConcluidos" para alertas
+- Mensagens personalizadas com detalhes do pedido
+- Notificação automática quando pedido é processado
+- Integração com sistema de entrega/retirada
+- Simulação de alertas para cliente e cozinha
 
 ### 🛡️ Tratamento de Erros
 
@@ -443,6 +500,9 @@ awslocal sqs list-queues
 # Listar buckets S3
 awslocal s3 ls
 
+# Verificar tópicos SNS
+awslocal sns list-topics
+
 # Verificar funções Lambda
 awslocal lambda list-functions
 ```
@@ -457,6 +517,13 @@ awslocal dynamodb scan --table-name Pedidos
 
 ```bash
 awslocal s3 ls s3://comprovantes/
+```
+
+### Verificar notificações enviadas:
+
+```bash
+# Verificar logs de notificações
+docker compose logs localstack | grep -A5 -B5 "PedidosConcluidos"
 ```
 
 ## 🧪 Exemplo de Payload
@@ -511,7 +578,8 @@ O sistema trata diversos tipos de erro:
 3. Pedido é enviado para **fila SQS**
 4. **ProcessarPedido** consome a fila automaticamente
 5. PDF é gerado e salvo no **S3**
-6. Status é atualizado para "PROCESSADO" no **DynamoDB**
+6. **Notificação SNS** é enviada com detalhes do pedido
+7. Status é atualizado para "PROCESSADO" no **DynamoDB**
 
 ## 🛠️ Desenvolvimento
 
@@ -529,6 +597,9 @@ docker compose down
 
 # Ver logs do LocalStack
 docker compose logs -f
+
+# Ver notificações específicas
+docker compose logs localstack | grep -i sns
 ```
 
 ## 📋 Próximas Melhorias
@@ -539,6 +610,8 @@ docker compose logs -f
 - [ ] Adicionar métricas e alertas
 - [ ] Interface web para visualizar pedidos
 - [ ] Integração com sistema de pagamento
+- [ ] Webhook para receber confirmações de entrega
+- [ ] Dashboard de notificações em tempo real
 
 ## 📞 Suporte
 
@@ -548,6 +621,7 @@ Para dúvidas ou problemas:
 2. Confirme se o LocalStack iniciou corretamente
 3. Verifique os logs com `docker compose logs`
 4. Certifique-se de que todas as dependências estão instaladas
+5. Verifique se o tópico SNS foi criado corretamente
 
 ---
 

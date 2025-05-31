@@ -21,6 +21,7 @@ cleanup_on_error() {
         aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb delete-table --table-name Pedidos 2>/dev/null || true
         aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs delete-queue --queue-url "http://$ETH0_IP:4566/000000000000/fila-pedidos" 2>/dev/null || true
         aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rb s3://comprovantes --force 2>/dev/null || true
+        aws --endpoint-url=$LOCALSTACK_ENDPOINT sns delete-topic --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" 2>/dev/null || true
         if [ ! -z "$API_ID" ]; then
             aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway delete-rest-api --rest-api-id "$API_ID" 2>/dev/null || true
         fi
@@ -140,6 +141,12 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs create-queue --queue-name fila-pedid
 echo "  🗃️ Criando bucket S3: comprovantes"
 aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 mb s3://comprovantes > /dev/null 2>&1 || true
 
+# Criação do tópico SNS
+echo "  📧 Criando tópico SNS: PedidosConcluidos"
+aws --endpoint-url=$LOCALSTACK_ENDPOINT sns create-topic \
+  --name PedidosConcluidos \
+  --region us-east-1 > /dev/null 2>&1 || true
+
 echo "🚀 Criando funções Lambda..."
 echo "  🔧 Criando função CriarPedido"
 aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-function \
@@ -217,9 +224,29 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-event-source-mapping \
   --batch-size 1 \
   --enabled > /dev/null 2>&1
 
-echo ""
-echo "🎉 DEPLOY CONCLUÍDO COM SUCESSO!"
-echo "🔗 Endpoint disponível:"
-echo "POST http://$ETH0_IP:4566/restapis/$API_ID/local/_user_request_/pedidos"
-echo "exemplo: curl -X POST http://$ETH0_IP:4566/restapis/$API_ID/local/_user_request_/pedidos -d @evento-exemplo.json -H 'Content-Type: application/json'"
-echo "Use o arquivo 'evento-exemplo.json' com curl ou Postman para testar"
+echo "📧 Configurando permissões SNS..."
+
+# Obter ARN da função Lambda ProcessarPedido
+LAMBDA_ARN="arn:aws:lambda:us-east-1:000000000000:function:ProcessarPedido"
+
+# Criar policy para permitir que a Lambda publique no SNS
+POLICY_DOCUMENT=$(cat << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sns:Publish",
+                "sns:GetTopicAttributes"
+            ],
+            "Resource": "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos"
+        }
+    ]
+}
+EOF
+)
+
+# Criar role IAM para a Lambda (se não existir)
+aws --endpoint-url=$LOCALSTACK_ENDPOINT iam create-role \
+  --role-name Process
