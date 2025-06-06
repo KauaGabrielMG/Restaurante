@@ -732,4 +732,15 @@ Para dúvidas ou problemas:
 
 ---
 
-_Projeto desenvolvido para fins acadêmicos - Faculdade_
+\_Projeto desenvolvido para fins acadêmicos - Faculdade Ulbra\_
+
+## 📄 Licença
+
+Este projeto é licenciado sob a Licença MIT - consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+## 👥 Contribuidores
+
+Agradecimentos especiais a todos que contribuíram para este projeto:
+
+- KauaGabrielMG
+- JoaoVictorCarvalh0
