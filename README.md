@@ -60,7 +60,7 @@ graph LR
 
 ### Obrigatórios:
 
-- **Docker** e **Docker Compose** (versão 20+)
+- **Docker** e **docker-compose** (versão 20+)
 - **Node.js** (versão 18+)
 - **npm** (incluído com Node.js)
 - **AWS CLI** (versão 2+)
@@ -102,11 +102,11 @@ winget install Amazon.AWSCLI
 ### Verificação da Instalação:
 
 ```bash
-docker --version          # Docker version 27.5.1+
-docker-compose --version  # Docker Compose version v2.33.1+
-node --version            # v18.19.1+
-npm --version             # 11.3.0+
-aws --version             # aws-cli/2.27.19+
+docker --version          # Docker version 20.10+
+docker-compose --version  # docker-compose version 1.29+
+node --version            # v18.0.0+
+npm --version             # 8.0.0+
+aws --version             # aws-cli/2.0.0+
 ```
 
 ## ⚙️ Configuração e Execução Completa
@@ -131,7 +131,7 @@ chmod +x *.sh
 
 ```bash
 # Iniciar serviços LocalStack em segundo plano
-docker compose up -d
+docker-compose up -d
 
 # Verificar se o LocalStack está rodando
 docker ps | grep localstack
@@ -299,9 +299,9 @@ curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedi
 }
 ```
 
-```bash
+### Teste 4: Dados Incompletos
 
-# Teste com JSON malformado (deve retornar erro 400)
+```bash
 curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedidos \
   -H "Content-Type: application/json" \
   -d '{"cliente": "João", mesa": 5}'
@@ -352,6 +352,9 @@ aws --endpoint-url=$AWS_ENDPOINT_URL dynamodb get-item \
   --key '{"id":{"S":"550e8400-e29b-41d4-a716-446655440000"}}'
 ```
 
+> [!NOTE]
+> O ID será gerado automaticamente e pode variar
+
 ### Verificar PDFs Gerados
 
 ```bash
@@ -365,13 +368,29 @@ aws --endpoint-url=$AWS_ENDPOINT_URL s3 cp s3://comprovantes/SEU_PEDIDO_ID.pdf .
 ### Verificar Notificações SNS
 
 ```bash
-# Listar mensagens publicadas no tópico SNS (simulação)
-# No LocalStack, as mensagens ficam disponíveis nos logs
-docker compose logs localstack | grep -i "sns.*pedidosconcluidos"
+# Verificar logs de notificações SNS (mostra que mensagens estão sendo enviadas)
+docker-compose logs localstack | grep -i "sns.*pedidosconcluidos"
+
+# Script detalhado para verificar SNS
+chmod +x verificar-sns.sh
+./verificar-sns.sh
 
 # Verificar tópico SNS existente
 aws --endpoint-url=$AWS_ENDPOINT_URL sns get-topic-attributes \
   --topic-arn arn:aws:sns:us-east-1:000000000000:PedidosConcluidos
+```
+
+> [!NOTE] > **Comportamento Esperado do SNS no LocalStack:**
+>
+> - ✅ **Mensagens sendo enviadas**: Os logs mostram `TopicArn: 'arn:aws:sns:us-east-1:000000000000:PedidosConcluidos'`
+> - ✅ **0 Assinantes**: Normal no LocalStack (não há emails/SMS reais configurados)
+> - ✅ **Sistema funcionando**: As mensagens estão sendo processadas internamente
+> - ✅ **Simulação perfeita**: Replica o comportamento da AWS real
+
+**Exemplo de Log SNS (Funcionamento Normal):**
+
+```bash
+localstack-1 | l.s.l.i.version_manager : [ProcessarPedido-xxx] TopicArn: 'arn:aws:sns:us-east-1:000000000000:PedidosConcluidos'
 ```
 
 **Exemplo de Notificação SNS:**
@@ -391,10 +410,10 @@ aws --endpoint-url=$AWS_ENDPOINT_URL sns get-topic-attributes \
 aws --endpoint-url=$AWS_ENDPOINT_URL logs describe-log-groups
 
 # Ver logs da função ProcessarPedido
-docker compose logs localstack | grep -i lambda
+docker-compose logs localstack | grep -i lambda
 
 # Ver logs específicos de SNS
-docker compose logs localstack | grep -i sns
+docker-compose logs localstack | grep -i sns
 ```
 
 ## 🔍 Troubleshooting
@@ -408,10 +427,10 @@ docker compose logs localstack | grep -i sns
 docker ps | grep localstack
 
 # Se não estiver, iniciar
-docker compose up -d
+docker-compose up -d
 
 # Verificar logs de erro
-docker compose logs localstack
+docker-compose logs localstack
 ```
 
 #### 2. Endpoint não funciona
@@ -457,7 +476,7 @@ aws --endpoint-url=$AWS_ENDPOINT_URL sns list-topics
 aws --endpoint-url=$AWS_ENDPOINT_URL lambda get-policy --function-name ProcessarPedido
 
 # Verificar logs específicos
-docker compose logs localstack | grep "SNS\|sns"
+docker-compose logs localstack | grep "SNS\|sns"
 ```
 
 ## 🗑️ Limpeza do Ambiente
@@ -473,10 +492,10 @@ docker compose logs localstack | grep "SNS\|sns"
 
 ```bash
 # Parar containers
-docker compose down
+docker-compose down
 
 # Remover volumes (limpeza completa)
-docker compose down -v
+docker-compose down -v
 ```
 
 ## 📁 Estrutura do Projeto
@@ -565,7 +584,7 @@ awslocal s3 ls s3://comprovantes/
 
 ```bash
 # Verificar logs de notificações
-docker compose logs localstack | grep -A5 -B5 "PedidosConcluidos"
+docker-compose logs localstack | grep -A5 -B5 "PedidosConcluidos"
 ```
 
 ### 📧 Exemplo de Notificação SNS Enviada
@@ -604,13 +623,13 @@ Para testar manualmente o sistema SNS:
 
 ```bash
 # Enviar notificação de teste
-aws --endpoint-url=http://172.x.x.x:4566 sns publish \
+aws --endpoint-url=$AWS_ENDPOINT_URL sns publish \
   --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" \
   --message "Teste de notificação manual" \
   --subject "🧪 Teste SNS"
 
 # Verificar se a mensagem foi processada
-docker compose logs localstack | grep -i "sns.*publish" | tail -5
+docker-compose logs localstack | grep -i "sns.*publish" | tail -5
 ```
 
 ## 🧪 Exemplo de Payload
@@ -680,13 +699,13 @@ tsc
 ./script.sh
 
 # Parar LocalStack
-docker compose down
+docker-compose down
 
 # Ver logs do LocalStack
-docker compose logs -f
+docker-compose logs -f
 
 # Ver notificações específicas
-docker compose logs localstack | grep -i sns
+docker-compose logs localstack | grep -i sns
 ```
 
 ## 📋 Próximas Melhorias
@@ -706,7 +725,7 @@ Para dúvidas ou problemas:
 
 1. Verifique se o Docker está rodando
 2. Confirme se o LocalStack iniciou corretamente
-3. Verifique os logs com `docker compose logs`
+3. Verifique os logs com `docker-compose logs`
 4. Certifique-se de que todas as dependências estão instaladas
 5. Verifique se o tópico SNS foi criado corretamente
 

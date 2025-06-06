@@ -10,6 +10,7 @@ handle_error() {
     exit 1
 }
 
+# # Função para limpeza em caso de erro
 # cleanup_on_error() {
 #     echo "🧼 Removendo artefatos criados..."
 #     rm -f criarPedido.zip processarPedido.zip
@@ -112,16 +113,69 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "📦 Empacotando funções Lambda..."
-# Incluir node_modules no ZIP para resolver dependências
-zip -r criarPedido.zip criar-pedido.js node_modules/ > /dev/null
-zip -r processarPedido.zip processar-pedido.js gerarPDF.js node_modules/ > /dev/null
-if [ $? -ne 0 ]; then
-  echo "❌ Erro ao empacotar as funções Lambda. Verifique os arquivos criados."
-  echo "Certifique que tenha o zip instalado."
-  echo "Você pode instalar o zip com: sudo apt-get install zip"
-  exit 1
-fi
-echo "✅ Lambdas empacotadas!"
+
+# Criar diretório temporário para bundle otimizado
+echo "  📦 Criando bundle otimizado (apenas dependências de runtime)..."
+mkdir -p lambda-bundle/node_modules
+
+# Instalar apenas dependências de produção no diretório temporário
+cd lambda-bundle
+npm init -y > /dev/null 2>&1
+
+# Copiar configuração otimizada
+cp ../.npmrc-lambda .npmrc
+
+# Instalar dependências otimizadas (apenas runtime, sem dev dependencies)
+npm install --production --no-optional --no-audit --no-fund \
+  @aws-sdk/client-dynamodb@^3.600.0 \
+  @aws-sdk/lib-dynamodb@^3.600.0 \
+  @aws-sdk/client-sqs@^3.600.0 \
+  @aws-sdk/client-s3@^3.600.0 \
+  @aws-sdk/client-sns@^3.600.0 \
+  jspdf@^3.0.1 \
+  uuid@^9.0.0 > /dev/null 2>&1
+
+# Remover arquivos desnecessários para reduzir ainda mais o tamanho
+echo "    🧹 Removendo arquivos desnecessários..."
+find node_modules -name "*.d.ts" -delete
+find node_modules -name "*.ts" -delete
+find node_modules -name "*.md" -delete
+find node_modules -name "LICENSE*" -delete
+find node_modules -name "CHANGELOG*" -delete
+find node_modules -name "*.map" -delete
+find node_modules -name "test" -type d -exec rm -rf {} + 2>/dev/null || true
+find node_modules -name "tests" -type d -exec rm -rf {} + 2>/dev/null || true
+find node_modules -name "docs" -type d -exec rm -rf {} + 2>/dev/null || true
+find node_modules -name "examples" -type d -exec rm -rf {} + 2>/dev/null || true
+
+cd ..
+
+# Copiar arquivos JS compilados para o bundle
+cp criar-pedido.js lambda-bundle/
+cp processar-pedido.js lambda-bundle/
+cp gerarPDF.js lambda-bundle/
+
+# Criar ZIPs otimizados
+echo "  🗜️ Compactando Lambda CriarPedido (otimizado)..."
+cd lambda-bundle
+zip -r ../criarPedido.zip criar-pedido.js node_modules/ > /dev/null
+cd ..
+
+echo "  🗜️ Compactando Lambda ProcessarPedido (otimizado)..."
+cd lambda-bundle
+zip -r ../processarPedido.zip processar-pedido.js gerarPDF.js node_modules/ > /dev/null
+cd ..
+
+# Limpar diretório temporário | Vou comentar essa linha para manter os bundles
+#** rm -rf lambda-bundle
+
+# Verificar tamanho dos ZIPs
+CRIAR_SIZE=$(du -h criarPedido.zip | cut -f1)
+PROCESSAR_SIZE=$(du -h processarPedido.zip | cut -f1)
+
+echo "  ✅ CriarPedido.zip: $CRIAR_SIZE"
+echo "  ✅ ProcessarPedido.zip: $PROCESSAR_SIZE"
+echo "✅ Lambdas empacotadas com dependências otimizadas!"
 
 echo "🔧 Criando recursos AWS no LocalStack..."
 

@@ -1,0 +1,8 @@
+# Configuração otimizada para bundles Lambda
+production=true
+optional=false
+dev=false
+save-exact=true
+package-lock=false
+audit=false
+fund=false

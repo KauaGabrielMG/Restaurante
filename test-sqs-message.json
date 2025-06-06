@@ -1,0 +1,8 @@
+{
+  "Records": [
+    {
+      "body": "{\"id\":\"test-1749237558\",\"cliente\":\"Cliente Teste\",\"mesa\":99,\"itens\":[{\"nome\":\"Item Teste\",\"quantidade\":1,\"preco\":10.00}],\"status\":\"CRIADO\",\"criadoEm\":\"2025-06-06T16:19:18-03:00\"}",
+      "messageId": "test-message-id"
+    }
+  ]
+}

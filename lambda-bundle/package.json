@@ -1,0 +1,22 @@
+{
+  "name": "lambda-bundle",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.825.0",
+    "@aws-sdk/client-s3": "3.825.0",
+    "@aws-sdk/client-sns": "3.825.0",
+    "@aws-sdk/client-sqs": "3.825.0",
+    "@aws-sdk/lib-dynamodb": "3.825.0",
+    "jspdf": "3.0.1",
+    "uuid": "9.0.1"
+  }
+}
