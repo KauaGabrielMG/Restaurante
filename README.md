@@ -23,7 +23,7 @@ docker-compose up -d
 ./testar-sistema.sh
 
 # 4. Ver status completo
-chmod +x status-sistema.sh
+chmod +x *.sh
 ./status-sistema.sh
 ```
 

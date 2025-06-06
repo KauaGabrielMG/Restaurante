@@ -62,7 +62,7 @@ get_machine_ip() {
     fi
 
     # Tentar outras interfaces comuns
-    for interface in eth1 enp0s3 enp0s8 wlan0 wlp2s0; do
+    for interface in eth0 eth1 enp0s3 enp0s8 wlan0 wlp2s0; do
         ip=$(ip addr show $interface 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | head -1)
         if [ ! -z "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "$ip"
