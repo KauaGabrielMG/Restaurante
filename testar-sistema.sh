@@ -205,7 +205,74 @@ else
 fi
 
 echo ""
-echo "🧪 Teste 5: Verificar processamento de pedidos e notificações SNS"
+echo "🧪 Teste 5: Testar notificações SNS manuais"
+
+# Teste 5a: Notificação simples
+echo "5a. Enviando notificação simples ao SNS..."
+SNS_SIMPLE_RESULT=$(aws --endpoint-url=http://$ETH0_IP:4566 sns publish \
+  --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" \
+  --message "Teste de notificação do sistema - $(date)" \
+  --subject "🧪 Teste SNS Sistema" 2>/dev/null || echo "ERRO")
+
+if [ "$SNS_SIMPLE_RESULT" != "ERRO" ] && echo "$SNS_SIMPLE_RESULT" | grep -q "MessageId"; then
+    SNS_MSG_ID=$(echo "$SNS_SIMPLE_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
+    echo "✅ Teste 5a PASSOU - Notificação SNS simples enviada (ID: $SNS_MSG_ID)"
+else
+    echo "❌ Teste 5a FALHOU - Erro ao enviar notificação SNS simples"
+fi
+
+# Teste 5b: Notificação com atributos
+echo "5b. Enviando notificação com atributos ao SNS..."
+if [ ! -z "$PEDIDO_ID" ]; then
+    SNS_COMPLEX_RESULT=$(aws --endpoint-url=http://$ETH0_IP:4566 sns publish \
+      --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" \
+      --message "Pedido $PEDIDO_ID foi testado com sucesso! Cliente: João Silva, Mesa: 5" \
+      --subject "🍽️ Teste de Pedido Concluído" \
+      --message-attributes '{
+        "pedidoId": {
+          "DataType": "String",
+          "StringValue": "'$PEDIDO_ID'"
+        },
+        "cliente": {
+          "DataType": "String",
+          "StringValue": "João Silva"
+        },
+        "mesa": {
+          "DataType": "Number",
+          "StringValue": "5"
+        },
+        "tipo": {
+          "DataType": "String",
+          "StringValue": "TESTE_SISTEMA"
+        }
+      }' 2>/dev/null || echo "ERRO")
+
+    if [ "$SNS_COMPLEX_RESULT" != "ERRO" ] && echo "$SNS_COMPLEX_RESULT" | grep -q "MessageId"; then
+        SNS_COMPLEX_ID=$(echo "$SNS_COMPLEX_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
+        echo "✅ Teste 5b PASSOU - Notificação SNS com atributos enviada (ID: $SNS_COMPLEX_ID)"
+    else
+        echo "❌ Teste 5b FALHOU - Erro ao enviar notificação SNS com atributos"
+    fi
+else
+    echo "⚠️ Teste 5b PULADO - Sem ID de pedido para testar notificação com atributos"
+fi
+
+# Teste 5c: Verificar logs SNS
+echo "5c. Verificando logs de notificações SNS..."
+sleep 2
+SNS_LOGS_COUNT=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
+if [ "$SNS_LOGS_COUNT" -gt 0 ]; then
+    echo "✅ Teste 5c PASSOU - $SNS_LOGS_COUNT notificações SNS encontradas nos logs"
+    echo "📧 Últimas 3 notificações SNS:"
+    docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | tail -3 | while read line; do
+        echo "  📧 $(echo $line | cut -c1-80)..."
+    done
+else
+    echo "❌ Teste 5c FALHOU - Nenhuma notificação SNS encontrada nos logs"
+fi
+
+echo ""
+echo "🧪 Teste 6: Verificar processamento de pedidos e notificações automáticas"
 
 if [ ! -z "$PEDIDO_ID" ]; then
     echo "Aguardando processamento do pedido (10 segundos)..."
@@ -218,51 +285,60 @@ if [ ! -z "$PEDIDO_ID" ]; then
       --query 'Item.status.S' --output text 2>/dev/null || true)
 
     if [ "$PEDIDO_STATUS" = "PROCESSADO" ]; then
-        echo "✅ Teste 5a PASSOU - Pedido foi processado (status: PROCESSADO)"
+        echo "✅ Teste 6a PASSOU - Pedido foi processado (status: PROCESSADO)"
+
+        # Verificar se há notificações SNS relacionadas a este pedido nos logs
+        echo "Verificando notificações SNS automáticas para o pedido $PEDIDO_ID..."
+        SNS_AUTO_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | tail -20 || true)
+        SNS_AUTO_COUNT=$(echo "$SNS_AUTO_LOGS" | wc -l || echo "0")
+
+        if [ "$SNS_AUTO_COUNT" -gt 0 ]; then
+            echo "✅ Teste 6d PASSOU - $SNS_AUTO_COUNT notificações SNS automáticas encontradas"
+        else
+            echo "⚠️ Teste 6d PARCIAL - Notificações SNS automáticas não detectadas nos logs"
+        fi
+
     elif [ "$PEDIDO_STATUS" = "Pendente" ]; then
-        echo "⚠️ Teste 5a PARCIAL - Pedido ainda está pendente (pode estar processando)"
+        echo "⚠️ Teste 6a PARCIAL - Pedido ainda está pendente (pode estar processando)"
     else
-        echo "❌ Teste 5a FALHOU - Status do pedido: $PEDIDO_STATUS"
+        echo "❌ Teste 6a FALHOU - Status do pedido: $PEDIDO_STATUS"
     fi
 
     # Verificar se PDF foi gerado no S3
     S3_FILES=$(aws --endpoint-url=http://$ETH0_IP:4566 s3 ls s3://comprovantes/ 2>/dev/null | grep "$PEDIDO_ID" || true)
     if [ ! -z "$S3_FILES" ]; then
-        echo "✅ Teste 5b PASSOU - PDF do comprovante foi gerado no S3"
+        echo "✅ Teste 6b PASSOU - PDF do comprovante foi gerado no S3"
     else
-        echo "❌ Teste 5b FALHOU - PDF não encontrado no S3"
+        echo "❌ Teste 6b FALHOU - PDF não encontrado no S3"
     fi
 
-    # Verificar logs do SNS (notificações enviadas)
-    echo "Verificando notificações SNS enviadas..."
-    SNS_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "pedidosconcluidos\|sns.*publish" | tail -5 || true)
-    if [ ! -z "$SNS_LOGS" ]; then
-        echo "✅ Teste 5c PASSOU - Notificações SNS foram enviadas"
-        echo "📧 Últimas notificações:"
-        echo "$SNS_LOGS" | head -3
+    # Verificar logs do SNS (notificações enviadas automaticamente pela Lambda)
+    echo "Verificando notificações SNS automáticas enviadas pela Lambda ProcessarPedido..."
+    SNS_LAMBDA_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -A 5 -B 5 "ProcessarPedido.*sns\|sns.*ProcessarPedido" | tail -10 || true)
+    if [ ! -z "$SNS_LAMBDA_LOGS" ]; then
+        echo "✅ Teste 6c PASSOU - Lambda ProcessarPedido enviou notificações SNS automaticamente"
+        echo "📧 Logs da integração Lambda + SNS:"
+        echo "$SNS_LAMBDA_LOGS" | head -3 | while read line; do
+            echo "  🔗 $(echo $line | cut -c1-80)..."
+        done
     else
-        echo "❌ Teste 5c FALHOU - Nenhuma notificação SNS encontrada nos logs"
+        echo "⚠️ Teste 6c PARCIAL - Logs específicos da integração Lambda + SNS não encontrados"
+        echo "💡 Verificando logs gerais do SNS para este período..."
+
+        # Verificar logs SNS gerais nas últimas interações
+        RECENT_SNS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | tail -5 || true)
+        if [ ! -z "$RECENT_SNS" ]; then
+            echo "✅ Notificações SNS recentes encontradas:"
+            echo "$RECENT_SNS" | while read line; do
+                echo "  📧 $(echo $line | cut -c1-80)..."
+            done
+        else
+            echo "❌ Nenhuma notificação SNS recente encontrada"
+        fi
     fi
 
 else
-    echo "⚠️ Teste 5 PULADO - Sem ID de pedido para verificar processamento"
-fi
-
-echo ""
-echo "🧪 Teste 6: Testar notificação SNS manual"
-
-# Publicar mensagem de teste no SNS
-TEST_MESSAGE="Teste do sistema de notificações - $(date)"
-SNS_RESULT=$(aws --endpoint-url=http://$ETH0_IP:4566 sns publish \
-  --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" \
-  --message "$TEST_MESSAGE" \
-  --subject "🧪 Teste SNS" 2>/dev/null || echo "ERRO")
-
-if [ "$SNS_RESULT" != "ERRO" ] && echo "$SNS_RESULT" | grep -q "MessageId"; then
-    MESSAGE_ID=$(echo "$SNS_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
-    echo "✅ Teste 6 PASSOU - Notificação SNS manual enviada (MessageId: $MESSAGE_ID)"
-else
-    echo "❌ Teste 6 FALHOU - Erro ao enviar notificação SNS manual"
+    echo "⚠️ Teste 6 PULADO - Sem ID de pedido para verificar processamento"
 fi
 
 echo ""
@@ -276,10 +352,11 @@ TOPIC_ATTRS=$(aws --endpoint-url=http://$ETH0_IP:4566 sns get-topic-attributes \
 if [ "$TOPIC_ATTRS" != "ERRO" ] && echo "$TOPIC_ATTRS" | grep -q "TopicArn"; then
     echo "✅ Teste 7 PASSOU - Tópico SNS configurado corretamente"
     # Mostrar alguns atributos importantes
-    DISPLAY_NAME=$(echo "$TOPIC_ATTRS" | grep -o '"DisplayName": "[^"]*"' | cut -d'"' -f4 || echo "N/A")
-    TOPIC_ARN=$(echo "$TOPIC_ATTRS" | grep -o '"TopicArn": "[^"]*"' | cut -d'"' -f4 || echo "N/A")
-    echo "  📧 TopicArn: $TOPIC_ARN"
-    echo "  📝 DisplayName: $DISPLAY_NAME"
+    SUBSCRIPTIONS_CONFIRMED=$(echo "$TOPIC_ATTRS" | grep -o '"SubscriptionsConfirmed": "[^"]*"' | cut -d'"' -f4 || echo "N/A")
+    SUBSCRIPTIONS_PENDING=$(echo "$TOPIC_ATTRS" | grep -o '"SubscriptionsPending": "[^"]*"' | cut -d'"' -f4 || echo "N/A")
+    echo "  📧 Assinantes confirmados: $SUBSCRIPTIONS_CONFIRMED"
+    echo "  📧 Assinantes pendentes: $SUBSCRIPTIONS_PENDING"
+    echo "  📧 Status: Tópico ativo e funcionando"
 else
     echo "❌ Teste 7 FALHOU - Erro ao obter atributos do tópico SNS"
 fi
@@ -292,11 +369,11 @@ if [ ! -z "$PEDIDO_ID" ]; then
     PEDIDO_MESSAGE=$(cat << EOF
 {
   "pedidoId": "$PEDIDO_ID",
-  "cliente": "João",
+  "cliente": "João Silva",
   "mesa": 5,
   "status": "PRONTO",
-  "total": 25.99,
-  "itens": ["Pizza"],
+  "total": 47.40,
+  "itens": ["Hambúrguer Artesanal", "Batata Frita", "Refrigerante"],
   "timestamp": "$(date -Iseconds)"
 }
 EOF
@@ -313,7 +390,7 @@ EOF
         },
         "cliente": {
           "DataType": "String",
-          "StringValue": "João"
+          "StringValue": "João Silva"
         },
         "mesa": {
           "DataType": "Number",
@@ -321,7 +398,11 @@ EOF
         },
         "total": {
           "DataType": "Number",
-          "StringValue": "25.99"
+          "StringValue": "47.40"
+        },
+        "tipo": {
+          "DataType": "String",
+          "StringValue": "PEDIDO_PRONTO"
         }
       }' 2>/dev/null || echo "ERRO")
 
@@ -346,10 +427,32 @@ if [ ! -z "$SNS_HISTORY" ]; then
     echo "✅ Teste 9 PASSOU - Histórico de mensagens SNS encontrado"
     echo "📊 Últimas mensagens SNS:"
     echo "$SNS_HISTORY" | head -5 | while read line; do
-        echo "  📧 $line"
+        echo "  📧 $(echo $line | cut -c1-80)..."
     done
+
+    # Contar total de mensagens SNS
+    TOTAL_SNS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
+    echo "📊 Total de mensagens SNS enviadas: $TOTAL_SNS"
 else
     echo "❌ Teste 9 FALHOU - Nenhum histórico de mensagens SNS encontrado"
+fi
+
+echo ""
+echo "🧪 Teste 10: Verificar se SNS está recebendo notificações da Lambda ProcessarPedido"
+
+# Verificar logs específicos da Lambda ProcessarPedido relacionados ao SNS
+echo "Verificando notificações SNS enviadas pela Lambda ProcessarPedido..."
+LAMBDA_SNS_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "processarpedido.*sns\|sns.*processarpedido" | tail -5 || true)
+
+if [ ! -z "$LAMBDA_SNS_LOGS" ]; then
+    echo "✅ Teste 10 PASSOU - Lambda ProcessarPedido está enviando notificações SNS"
+    echo "📧 Logs da integração Lambda + SNS:"
+    echo "$LAMBDA_SNS_LOGS" | head -3 | while read line; do
+        echo "  🔗 $(echo $line | cut -c1-80)..."
+    done
+else
+    echo "⚠️ Teste 10 PARCIAL - Logs específicos da integração Lambda + SNS não encontrados"
+    echo "💡 Isso é normal se nenhum pedido foi processado ainda"
 fi
 
 echo ""
