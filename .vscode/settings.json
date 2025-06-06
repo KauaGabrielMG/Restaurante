@@ -1,0 +1,23 @@
+{
+  //* Configurações de formatação
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, // Formatação de arquivos .js
+  "[javascriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, // Formatação de arquivos .jsx
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, // Formatação de arquivos .ts
+  "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, // Formatação de arquivos .jsx
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, // Formatação de arquivos .json
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode", // Anteriormente "esbenp.prettier-vscode"
+    "editor.wordWrap": "off"
+  }, // Formatação de arquivos .json
+  "[prisma]": { "editor.defaultFormatter": "Prisma.prisma" }, // Formatação de arquivos .prisma
+  "[html]": { "editor.defaultFormatter": "vscode.html-language-features" }, // Formatação de arquivos .html
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }, // Formatação de arquivos .css
+  // "[dockerfile]": { "editor.defaultFormatter": "" }, // Formatação de arquivos .dockerfile ======== Não sei ainda '-'
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "diffEditor.ignoreTrimWhitespace": true
+  }, // Formatação de arquivos .md
+  "files.exclude": {
+    // "*.js": true // Excluir arquivos .js
+  }
+}

@@ -4,18 +4,18 @@
   "itens": [
     {
       "nome": "Hambúrguer Artesanal",
-      "quantidade": 2,
-      "preco": 25.90
+      "quantidade": 1,
+      "preco": 28.9
     },
     {
-      "nome": "Batata Frita Especial",
+      "nome": "Batata Frita",
       "quantidade": 1,
-      "preco": 12.50
+      "preco": 12.5
     },
     {
       "nome": "Refrigerante",
-      "quantidade": 2,
-      "preco": 5.00
+      "quantidade": 1,
+      "preco": 6.0
     }
   ]
 }

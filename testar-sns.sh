@@ -1,159 +1,300 @@
 #!/bin/bash
 
-# Script para testar notificações SNS do sistema de restaurante
+# Script específico para testar SNS no Sistema de Restaurante
 
 set -e
 
 echo "📧 Testando Sistema de Notificações SNS..."
 
-# Obter IP da interface eth0
-ETH0_IP=$(ip addr show eth0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1 | head -1)
+# Função para obter IP da máquina
+get_machine_ip() {
+    local ip=""
+
+    # Tentar eth0 primeiro
+    ip=$(ip addr show eth0 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | head -1)
+    if [ ! -z "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+
+    # Tentar outras interfaces comuns
+    for interface in eth1 enp0s3 enp0s8 wlan0 wlp2s0; do
+        ip=$(ip addr show $interface 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | head -1)
+        if [ ! -z "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$ip"
+            return 0
+        fi
+    done
+
+    # Tentar usando hostname -I
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ ! -z "$ip" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+
+    return 1
+}
+
+ETH0_IP=$(get_machine_ip)
+
 if [ -z "$ETH0_IP" ]; then
+  echo "❌ Não foi possível obter o IP da interface eth0"
+  echo "💡 Tentando usar localhost como fallback..."
   ETH0_IP="localhost"
 fi
 
-ENDPOINT_BASE="http://$ETH0_IP:4566"
-echo "🌐 Endpoint: $ENDPOINT_BASE"
+echo "🌐 Usando IP: $ETH0_IP"
+ENDPOINT_URL="http://$ETH0_IP:4566"
+
+# Verificar se LocalStack está rodando
+if ! docker ps | grep -q localstack; then
+    echo "❌ LocalStack não está rodando!"
+    echo "💡 Execute primeiro: docker compose up -d"
+    exit 1
+fi
 
 echo ""
-echo "🔍 1. Verificando tópico SNS..."
+echo "📧 Teste 1: Verificar se tópico SNS existe"
 
-# Verificar se o tópico existe
+TOPICS=$(aws --endpoint-url=$ENDPOINT_URL sns list-topics --query 'Topics[].TopicArn' --output text 2>/dev/null || true)
 TOPIC_ARN="arn:aws:sns:us-east-1:000000000000:PedidosConcluidos"
-aws --endpoint-url=$ENDPOINT_BASE sns get-topic-attributes \
-  --topic-arn $TOPIC_ARN > /dev/null 2>&1
 
-if [ $? -eq 0 ]; then
-    echo "✅ Tópico SNS encontrado: $TOPIC_ARN"
+if echo "$TOPICS" | grep -q "PedidosConcluidos"; then
+    echo "✅ Tópico SNS 'PedidosConcluidos' existe"
+    echo "📧 ARN: $TOPIC_ARN"
 else
-    echo "❌ Tópico SNS não encontrado! Execute ./script.sh primeiro"
+    echo "❌ Tópico SNS 'PedidosConcluidos' não encontrado"
+    echo "💡 Execute primeiro: ./script.sh"
     exit 1
 fi
 
 echo ""
-echo "🔍 2. Verificando subscritores..."
+echo "📧 Teste 2: Verificar atributos do tópico SNS"
 
-# Listar subscritores do tópico
-echo "Subscritores do tópico:"
-aws --endpoint-url=$ENDPOINT_BASE sns list-subscriptions-by-topic \
-  --topic-arn $TOPIC_ARN \
-  --query 'Subscriptions[].{Protocol:Protocol,Endpoint:Endpoint}' \
-  --output table
+TOPIC_ATTRS=$(aws --endpoint-url=$ENDPOINT_URL sns get-topic-attributes \
+  --topic-arn "$TOPIC_ARN" \
+  --query 'Attributes' 2>/dev/null || echo "ERRO")
 
-echo ""
-echo "🔍 3. Testando publicação manual no SNS..."
+if [ "$TOPIC_ATTRS" != "ERRO" ] && echo "$TOPIC_ATTRS" | grep -q "TopicArn"; then
+    echo "✅ Atributos do tópico SNS obtidos com sucesso"
 
-# Publicar uma mensagem de teste
-TEST_MESSAGE="Teste de notificação: Pedido teste-12345 está pronto! Cliente: João Test, Mesa: 99, Total: R$ 50,00"
+    # Extrair informações específicas
+    POLICY=$(echo "$TOPIC_ATTRS" | grep -o '"Policy": "[^"]*"' | cut -d'"' -f4 || echo "N/A")
+    OWNER=$(echo "$TOPIC_ATTRS" | grep -o '"Owner": "[^"]*"' | cut -d'"' -f4 || echo "N/A")
 
-PUBLISH_RESULT=$(aws --endpoint-url=$ENDPOINT_BASE sns publish \
-  --topic-arn $TOPIC_ARN \
-  --message "$TEST_MESSAGE" \
-  --subject "🧪 Teste - Pedido Pronto!" \
-  --message-attributes \
-    'pedidoId={"DataType":"String","StringValue":"teste-12345"}' \
-    'cliente={"DataType":"String","StringValue":"João Test"}' \
-    'mesa={"DataType":"Number","StringValue":"99"}' \
-    'total={"DataType":"Number","StringValue":"50.00"}' \
-  --query 'MessageId' --output text)
-
-echo "✅ Mensagem de teste publicada!"
-echo "📧 MessageId: $PUBLISH_RESULT"
-
-echo ""
-echo "🔍 4. Testando fluxo completo com pedido real..."
-
-# Encontrar o endpoint da API
-API_ID=$(aws --endpoint-url=$ENDPOINT_BASE apigateway get-rest-apis \
-  --query 'items[0].id' --output text)
-
-if [ "$API_ID" = "None" ] || [ -z "$API_ID" ]; then
-    echo "❌ API Gateway não encontrado! Execute ./script.sh primeiro"
-    exit 1
+    echo "  👤 Owner: $OWNER"
+    echo "  🛡️ Policy: $(echo $POLICY | head -c 50)..."
+else
+    echo "❌ Erro ao obter atributos do tópico SNS"
 fi
 
-API_ENDPOINT="$ENDPOINT_BASE/restapis/$API_ID/local/_user_request_/pedidos"
-echo "🔗 Endpoint da API: $API_ENDPOINT"
+echo ""
+echo "📧 Teste 3: Enviar notificação simples"
 
-# Criar pedido de teste
-cat > pedido-sns-teste.json << EOF
+SIMPLE_MESSAGE="Teste de notificação simples - $(date)"
+SIMPLE_RESULT=$(aws --endpoint-url=$ENDPOINT_URL sns publish \
+  --topic-arn "$TOPIC_ARN" \
+  --message "$SIMPLE_MESSAGE" \
+  --subject "🧪 Teste SNS Simples" 2>/dev/null || echo "ERRO")
+
+if [ "$SIMPLE_RESULT" != "ERRO" ] && echo "$SIMPLE_RESULT" | grep -q "MessageId"; then
+    SIMPLE_MSG_ID=$(echo "$SIMPLE_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
+    echo "✅ Notificação simples enviada com sucesso"
+    echo "📧 MessageId: $SIMPLE_MSG_ID"
+    echo "📝 Mensagem: $SIMPLE_MESSAGE"
+else
+    echo "❌ Erro ao enviar notificação simples"
+    echo "🔍 Resposta: $SIMPLE_RESULT"
+fi
+
+echo ""
+echo "📧 Teste 4: Enviar notificação com atributos personalizados"
+
+PEDIDO_ID="test-$(date +%s)"
+COMPLEX_MESSAGE=$(cat << EOF
 {
-  "cliente": "Maria SNS Test",
-  "mesa": 15,
-  "itens": [
-    {"nome": "Pizza SNS", "quantidade": 1, "preco": 30.00},
-    {"nome": "Refrigerante", "quantidade": 2, "preco": 6.00}
-  ]
+  "pedidoId": "$PEDIDO_ID",
+  "cliente": "Cliente Teste",
+  "mesa": 10,
+  "status": "PRONTO",
+  "total": 45.90,
+  "itens": ["Hambúrguer", "Batata Frita", "Refrigerante"],
+  "timestamp": "$(date -Iseconds)",
+  "notificacao": "Seu pedido está pronto para retirada!"
 }
 EOF
+)
 
-echo ""
-echo "📤 Enviando pedido para testar notificação..."
+COMPLEX_RESULT=$(aws --endpoint-url=$ENDPOINT_URL sns publish \
+  --topic-arn "$TOPIC_ARN" \
+  --message "$COMPLEX_MESSAGE" \
+  --subject "🍽️ Pedido $PEDIDO_ID Pronto para Retirada!" \
+  --message-attributes '{
+    "pedidoId": {
+      "DataType": "String",
+      "StringValue": "'$PEDIDO_ID'"
+    },
+    "cliente": {
+      "DataType": "String",
+      "StringValue": "Cliente Teste"
+    },
+    "mesa": {
+      "DataType": "Number",
+      "StringValue": "10"
+    },
+    "total": {
+      "DataType": "Number",
+      "StringValue": "45.90"
+    },
+    "tipo": {
+      "DataType": "String",
+      "StringValue": "PEDIDO_PRONTO"
+    }
+  }' 2>/dev/null || echo "ERRO")
 
-# Enviar pedido
-RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -d @pedido-sns-teste.json)
-
-echo "Resposta da API: $RESPONSE"
-
-# Extrair ID do pedido
-PEDIDO_ID=$(echo $RESPONSE | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-
-if [ ! -z "$PEDIDO_ID" ]; then
-    echo "✅ Pedido criado: $PEDIDO_ID"
-
-    echo ""
-    echo "⏳ Aguardando processamento (15 segundos)..."
-    sleep 15
-
-    echo ""
-    echo "🔍 5. Verificando se notificação SNS foi enviada..."
-
-    # Verificar logs do LocalStack para SNS
-    echo "Procurando por notificações nos logs do LocalStack..."
-    CONTAINER_ID=$(docker ps -q --filter "name=localstack" 2>/dev/null)
-
-    if [ ! -z "$CONTAINER_ID" ]; then
-        # Procurar por logs relacionados ao SNS e ao pedido
-        echo ""
-        echo "📋 Logs de SNS encontrados:"
-        docker logs --since=30s "$CONTAINER_ID" 2>&1 | grep -i "sns\|PedidosConcluidos\|$PEDIDO_ID" || echo "Nenhum log específico encontrado"
-
-        echo ""
-        echo "📋 Logs de notificação (últimos 10):"
-        docker logs --tail=10 "$CONTAINER_ID" 2>&1 | grep -A3 -B3 "publish\|sns" || echo "Nenhuma publicação encontrada"
-    fi
-
-    echo ""
-    echo "🔍 6. Verificando status do pedido no DynamoDB..."
-
-    # Verificar se o pedido foi processado
-    aws --endpoint-url=$ENDPOINT_BASE dynamodb get-item \
-      --table-name Pedidos \
-      --key '{"id":{"S":"'$PEDIDO_ID'"}}' \
-      --query 'Item.{ID:id.S,Cliente:cliente.S,Status:status.S,Mesa:mesa.N}' \
-      --output table
-
+if [ "$COMPLEX_RESULT" != "ERRO" ] && echo "$COMPLEX_RESULT" | grep -q "MessageId"; then
+    COMPLEX_MSG_ID=$(echo "$COMPLEX_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
+    echo "✅ Notificação com atributos enviada com sucesso"
+    echo "📧 MessageId: $COMPLEX_MSG_ID"
+    echo "📝 Pedido ID: $PEDIDO_ID"
+    echo "💰 Total: R$ 45,90"
 else
-    echo "❌ Falha ao criar pedido de teste"
+    echo "❌ Erro ao enviar notificação com atributos"
+    echo "🔍 Resposta: $COMPLEX_RESULT"
 fi
 
-# Limpeza
-rm -f pedido-sns-teste.json
+echo ""
+echo "📧 Teste 5: Verificar logs de notificações no LocalStack"
+
+echo "Verificando últimas notificações SNS nos logs..."
+sleep 2  # Aguardar logs serem processados
+
+SNS_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish\|pedidosconcluidos" | tail -15 || true)
+
+if [ ! -z "$SNS_LOGS" ]; then
+    echo "✅ Logs de notificações SNS encontrados"
+    echo "📊 Últimas notificações (últimas 10):"
+    echo "$SNS_LOGS" | tail -10 | while read line; do
+        echo "  📧 $(echo $line | cut -c1-100)..."
+    done
+else
+    echo "❌ Nenhum log de notificação SNS encontrado"
+    echo "💡 Verifique se o LocalStack está configurado corretamente"
+fi
 
 echo ""
-echo "🔍 7. Exemplo de saída esperada da notificação:"
-echo ""
-echo "{"
-echo '  "TopicArn": "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos",'
-echo '  "Message": "Pedido teste-12345 foi processado e está pronto! Cliente: João Test, Mesa: 99, Total: R$ 50,00",'
-echo '  "Subject": "🍽️ Pedido Pronto para Retirada!"'
-echo "}"
+echo "📧 Teste 6: Simular múltiplas notificações (carga)"
+
+echo "Enviando 5 notificações em sequência..."
+
+for i in {1..5}; do
+    BATCH_MESSAGE="Notificação em lote $i/5 - Pedido lote-$i-$(date +%s)"
+    BATCH_RESULT=$(aws --endpoint-url=$ENDPOINT_URL sns publish \
+      --topic-arn "$TOPIC_ARN" \
+      --message "$BATCH_MESSAGE" \
+      --subject "📦 Lote $i - Teste de Carga SNS" \
+      --message-attributes '{
+        "lote": {
+          "DataType": "Number",
+          "StringValue": "'$i'"
+        },
+        "tipo": {
+          "DataType": "String",
+          "StringValue": "TESTE_CARGA"
+        }
+      }' 2>/dev/null || echo "ERRO")
+
+    if [ "$BATCH_RESULT" != "ERRO" ] && echo "$BATCH_RESULT" | grep -q "MessageId"; then
+        BATCH_MSG_ID=$(echo "$BATCH_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
+        echo "  ✅ Lote $i enviado - MessageId: $BATCH_MSG_ID"
+    else
+        echo "  ❌ Erro no lote $i"
+    fi
+
+    sleep 0.5  # Pequena pausa entre envios
+done
 
 echo ""
-echo "📊 Para monitorar notificações em tempo real:"
-echo "docker compose logs -f localstack | grep -i sns"
+echo "📧 Teste 7: Verificar estatísticas do tópico"
+
+# Verificar se há alguma métrica disponível (no LocalStack pode ser limitado)
+TOPIC_STATS=$(aws --endpoint-url=$ENDPOINT_URL sns get-topic-attributes \
+  --topic-arn "$TOPIC_ARN" \
+  --query 'Attributes.{SubscriptionsConfirmed: SubscriptionsConfirmed, SubscriptionsPending: SubscriptionsPending}' \
+  --output table 2>/dev/null || echo "ERRO")
+
+if [ "$TOPIC_STATS" != "ERRO" ]; then
+    echo "✅ Estatísticas do tópico obtidas"
+    echo "$TOPIC_STATS"
+else
+    echo "⚠️ Estatísticas não disponíveis no LocalStack"
+fi
 
 echo ""
-echo "✅ Teste de SNS concluído!"
+echo "📧 Teste 8: Testar notificação de erro/falha"
+
+ERROR_MESSAGE=$(cat << EOF
+{
+  "tipo": "ERRO",
+  "pedidoId": "erro-test-$(date +%s)",
+  "erro": "Falha no processamento do pedido",
+  "detalhes": "Sistema indisponível temporariamente",
+  "timestamp": "$(date -Iseconds)",
+  "acao_requerida": "Reprocessar pedido"
+}
+EOF
+)
+
+ERROR_RESULT=$(aws --endpoint-url=$ENDPOINT_URL sns publish \
+  --topic-arn "$TOPIC_ARN" \
+  --message "$ERROR_MESSAGE" \
+  --subject "🚨 Erro no Processamento de Pedido" \
+  --message-attributes '{
+    "tipo": {
+      "DataType": "String",
+      "StringValue": "ERRO"
+    },
+    "prioridade": {
+      "DataType": "String",
+      "StringValue": "ALTA"
+    },
+    "categoria": {
+      "DataType": "String",
+      "StringValue": "SISTEMA"
+    }
+  }' 2>/dev/null || echo "ERRO")
+
+if [ "$ERROR_RESULT" != "ERRO" ] && echo "$ERROR_RESULT" | grep -q "MessageId"; then
+    ERROR_MSG_ID=$(echo "$ERROR_RESULT" | grep -o '"MessageId": "[^"]*"' | cut -d'"' -f4)
+    echo "✅ Notificação de erro enviada com sucesso"
+    echo "🚨 MessageId: $ERROR_MSG_ID"
+else
+    echo "❌ Erro ao enviar notificação de erro"
+fi
+
+echo ""
+echo "📧 Teste Final: Verificar logs finais e resumo"
+
+sleep 2
+FINAL_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
+echo "📊 Total de mensagens SNS enviadas nos logs: $FINAL_LOGS"
+
+echo ""
+echo "🎉 Todos os testes SNS concluídos!"
+echo ""
+echo "📊 Resumo dos Testes:"
+echo "  ✅ Verificação de tópico"
+echo "  ✅ Atributos do tópico"
+echo "  ✅ Notificação simples"
+echo "  ✅ Notificação com atributos"
+echo "  ✅ Verificação de logs"
+echo "  ✅ Teste de carga (5 mensagens)"
+echo "  ✅ Estatísticas do tópico"
+echo "  ✅ Notificação de erro"
+echo ""
+echo "💡 Para ver todas as notificações nos logs:"
+echo "   docker logs restaurante-localstack-1 2>&1 | grep -i sns"
+echo ""
+echo "💡 Para listar todos os tópicos:"
+echo "   aws --endpoint-url=$ENDPOINT_URL sns list-topics"

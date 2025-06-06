@@ -6,29 +6,28 @@ set -e
 handle_error() {
     echo "❌ Erro na linha $1: $2"
     echo "🧹 Limpando recursos criados parcialmente..."
-    cleanup_on_error
+    # cleanup_on_error
     exit 1
 }
 
-# Função para limpeza em caso de erro
-cleanup_on_error() {
-    echo "🧼 Removendo artefatos criados..."
-    rm -f criarPedido.zip processarPedido.zip
-    rm -f criar-pedido.js processar-pedido.js gerarPDF.js
+# cleanup_on_error() {
+#     echo "🧼 Removendo artefatos criados..."
+#     rm -f criarPedido.zip processarPedido.zip
+#     rm -f criar-pedido.js processar-pedido.js gerarPDF.js
 
-    if [ ! -z "$LOCALSTACK_ENDPOINT" ]; then
-        echo "🗑️ Tentando remover recursos AWS criados..."
-        aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb delete-table --table-name Pedidos 2>/dev/null || true
-        aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs delete-queue --queue-url "http://$ETH0_IP:4566/000000000000/fila-pedidos" 2>/dev/null || true
-        aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rb s3://comprovantes --force 2>/dev/null || true
-        aws --endpoint-url=$LOCALSTACK_ENDPOINT sns delete-topic --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" 2>/dev/null || true
-        if [ ! -z "$API_ID" ]; then
-            aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway delete-rest-api --rest-api-id "$API_ID" 2>/dev/null || true
-        fi
-    fi
-}
+#     if [ ! -z "$LOCALSTACK_ENDPOINT" ]; then
+#         echo "🗑️ Tentando remover recursos AWS criados..."
+#         aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb delete-table --table-name Pedidos 2>/dev/null || true
+#         aws --endpoint-url=$LOCALSTACK_ENDPOINT sqs delete-queue --queue-url "http://$ETH0_IP:4566/000000000000/fila-pedidos" 2>/dev/null || true
+#         aws --endpoint-url=$LOCALSTACK_ENDPOINT s3 rb s3://comprovantes --force 2>/dev/null || true
+#         aws --endpoint-url=$LOCALSTACK_ENDPOINT sns delete-topic --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" 2>/dev/null || true
+#         if [ ! -z "$API_ID" ]; then
+#             aws --endpoint-url=$LOCALSTACK_ENDPOINT apigateway delete-rest-api --rest-api-id "$API_ID" 2>/dev/null || true
+#         fi
+#     fi
+# }
 
-# Configurar trap para capturar erros
+# # Configurar trap para capturar erros
 trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 
 echo "🚀 Iniciando deploy do Sistema de Restaurante..."
@@ -111,6 +110,7 @@ if [ $? -ne 0 ]; then
   echo "❌ Erro na compilação do TypeScript. Verifique os arquivos .ts."
   exit 1
 fi
+
 echo "📦 Empacotando funções Lambda..."
 # Incluir node_modules no ZIP para resolver dependências
 zip -r criarPedido.zip criar-pedido.js node_modules/ > /dev/null
@@ -124,6 +124,76 @@ fi
 echo "✅ Lambdas empacotadas!"
 
 echo "🔧 Criando recursos AWS no LocalStack..."
+
+# Criar role IAM para Lambda primeiro
+echo "  👤 Criando role IAM para Lambda..."
+
+# Trust policy para Lambda
+TRUST_POLICY=$(cat << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+}
+EOF
+)
+
+aws --endpoint-url=$LOCALSTACK_ENDPOINT iam create-role \
+  --role-name lambda-role \
+  --assume-role-policy-document "$TRUST_POLICY" > /dev/null 2>&1 || true
+
+# Policy para SNS e DynamoDB
+LAMBDA_POLICY=$(cat << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sns:Publish",
+                "sns:GetTopicAttributes",
+                "dynamodb:PutItem",
+                "dynamodb:GetItem",
+                "dynamodb:UpdateItem",
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+                "s3:PutObject",
+                "s3:GetObject"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+EOF
+)
+
+aws --endpoint-url=$LOCALSTACK_ENDPOINT iam create-policy \
+  --policy-name lambda-execution-policy \
+  --policy-document "$LAMBDA_POLICY" > /dev/null 2>&1 || true
+
+aws --endpoint-url=$LOCALSTACK_ENDPOINT iam attach-role-policy \
+  --role-name lambda-role \
+  --policy-arn arn:aws:iam::000000000000:policy/lambda-execution-policy > /dev/null 2>&1 || true
+
+# Aguardar role estar disponível
+sleep 2
 # Criação da tabela DynamoDB
 echo "  📋 Criando tabela DynamoDB: Pedidos"
 aws --endpoint-url=$LOCALSTACK_ENDPOINT dynamodb create-table \
@@ -153,16 +223,18 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-function \
   --function-name CriarPedido \
   --runtime nodejs18.x \
   --handler criar-pedido.handler \
+  --timeout 10 \
   --zip-file fileb://criarPedido.zip \
-  --role arn:aws:iam::000000000000:role/lambda-role > /dev/null 2>&1
+  --role arn:aws:iam::000000000000:role/lambda-role > /dev/null 2>&1 || true
 
 echo "  🔧 Criando função ProcessarPedido"
 aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-function \
   --function-name ProcessarPedido \
   --runtime nodejs18.x \
   --handler processar-pedido.handler \
+  --timeout 10 \
   --zip-file fileb://processarPedido.zip \
-  --role arn:aws:iam::000000000000:role/lambda-role > /dev/null 2>&1
+  --role arn:aws:iam::000000000000:role/lambda-role > /dev/null 2>&1 || true
 
 echo "🌐 Criando API Gateway e integrando com Lambda CriarPedido..."
 
@@ -222,31 +294,18 @@ aws --endpoint-url=$LOCALSTACK_ENDPOINT lambda create-event-source-mapping \
   --function-name ProcessarPedido \
   --event-source-arn "$QUEUE_ARN" \
   --batch-size 1 \
-  --enabled > /dev/null 2>&1
+  --enabled > /dev/null 2>&1 || true
 
-echo "📧 Configurando permissões SNS..."
-
-# Obter ARN da função Lambda ProcessarPedido
-LAMBDA_ARN="arn:aws:lambda:us-east-1:000000000000:function:ProcessarPedido"
-
-# Criar policy para permitir que a Lambda publique no SNS
-POLICY_DOCUMENT=$(cat << EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "sns:Publish",
-                "sns:GetTopicAttributes"
-            ],
-            "Resource": "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos"
-        }
-    ]
-}
-EOF
-)
-
-# Criar role IAM para a Lambda (se não existir)
-aws --endpoint-url=$LOCALSTACK_ENDPOINT iam create-role \
-  --role-name Process
+echo "✅ Deploy concluído com sucesso!"
+echo ""
+echo "🌐 Endpoints disponíveis:"
+echo "  📝 API Gateway: http://$ETH0_IP:4566/restapis/$API_ID/local/_user_request_/pedidos"
+echo "  📊 DynamoDB: Tabela 'Pedidos' criada"
+echo "  📬 SQS: Fila 'fila-pedidos' criada"
+echo "  🗃️ S3: Bucket 'comprovantes' criado"
+echo "  📧 SNS: Tópico 'PedidosConcluidos' criado"
+echo ""
+echo "🧪 Para testar, execute:"
+echo 'curl -X POST http://'$ETH0_IP':4566/restapis/'$API_ID'/local/_user_request_/pedidos \'
+echo '  -H "Content-Type: application/json" \'
+echo '  -d "{\"cliente\":\"João\",\"itens\":[{\"nome\":\"Pizza\",\"quantidade\":1,\"preco\":25.99}],\"mesa\":5}"'

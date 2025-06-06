@@ -1,12 +1,32 @@
-import {DynamoDB, SQS} from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { v4 as uuidv4 } from 'uuid';
 
-// Usar endpoint fixo para evitar problemas na Lambda
-const ETH0_IP = process.env.ETH0_IP || '172.29.30.139';
-const ENDPOINT = `http://${ETH0_IP}:4566`;
+// Configuração dos clientes AWS para LocalStack
+const dynamoClient = new DynamoDBClient({
+  region: 'us-east-1',
+  endpoint: process.env.LOCALSTACK_HOSTNAME
+    ? `http://${process.env.LOCALSTACK_HOSTNAME}:4566`
+    : 'http://172.18.0.2:4566', // IP do container LocalStack
+  credentials: {
+    accessKeyId: 'test',
+    secretAccessKey: 'test',
+  },
+});
 
-const dynamodb = new DynamoDB.DocumentClient({ endpoint: ENDPOINT });
-const sqs = new SQS({ endpoint: ENDPOINT });
+const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
+
+const sqsClient = new SQSClient({
+  region: 'us-east-1',
+  endpoint: process.env.LOCALSTACK_HOSTNAME
+    ? `http://${process.env.LOCALSTACK_HOSTNAME}:4566`
+    : 'http://172.18.0.2:4566', // IP do container LocalStack
+  credentials: {
+    accessKeyId: 'test',
+    secretAccessKey: 'test',
+  },
+});
 
 interface PedidoData {
   cliente: string;
@@ -33,7 +53,7 @@ export const handler = async (event: APIGatewayEvent) => {
         statusCode: 400,
         body: JSON.stringify({
           erro: 'Requisição inválida',
-          mensagem: 'Corpo da requisição é obrigatório'
+          mensagem: 'Corpo da requisição é obrigatório',
         }),
       };
     }
@@ -47,7 +67,7 @@ export const handler = async (event: APIGatewayEvent) => {
         statusCode: 400,
         body: JSON.stringify({
           erro: 'JSON inválido',
-          mensagem: 'Formato do JSON está incorreto'
+          mensagem: 'Formato do JSON está incorreto',
         }),
       };
     }
@@ -58,7 +78,7 @@ export const handler = async (event: APIGatewayEvent) => {
         statusCode: 400,
         body: JSON.stringify({
           erro: 'Dados incompletos',
-          mensagem: 'Campos obrigatórios: cliente, itens, mesa'
+          mensagem: 'Campos obrigatórios: cliente, itens, mesa',
         }),
       };
     }
@@ -69,41 +89,52 @@ export const handler = async (event: APIGatewayEvent) => {
         statusCode: 400,
         body: JSON.stringify({
           erro: 'Itens inválidos',
-          mensagem: 'É necessário pelo menos um item no pedido'
+          mensagem: 'É necessário pelo menos um item no pedido',
         }),
       };
     }
 
-    const id = uuidv4();
-
-    // Salvar no DynamoDB com tratamento de erro
+    const id = uuidv4(); // Salvar no DynamoDB com tratamento de erro
     try {
-      await dynamodb.put({
-        TableName: 'Pedidos',
-        Item: {
-          id,
-          cliente: dados.cliente,
-          itens: dados.itens,
-          mesa: dados.mesa,
-          status: 'Pendente',
-          criadoEm: new Date().toISOString(),
-        },
-      }).promise();
+      await dynamodb.send(
+        new PutCommand({
+          TableName: 'Pedidos',
+          Item: {
+            id,
+            cliente: dados.cliente,
+            itens: dados.itens,
+            mesa: dados.mesa,
+            status: 'Pendente',
+            criadoEm: new Date().toISOString(),
+          },
+        }),
+      );
     } catch (dynamoError) {
       console.error('Erro ao salvar no DynamoDB:', dynamoError);
       return {
         statusCode: 500,
         body: JSON.stringify({
           erro: 'Erro interno',
-          mensagem: 'Falha ao salvar pedido no banco de dados'
+          mensagem: 'Falha ao salvar pedido no banco de dados',
         }),
       };
-    }    // Enviar mensagem para SQS com tratamento de erro
+    }
+
+    // Enviar mensagem para SQS com tratamento de erro
     try {
-      await sqs.sendMessage({
-        QueueUrl: `http://${ETH0_IP}:4566/000000000000/fila-pedidos`,
-        MessageBody: JSON.stringify({ id, timestamp: new Date().toISOString() })
-      }).promise();
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: `http://172.18.0.2:4566/000000000000/fila-pedidos`,
+          MessageBody: JSON.stringify({
+            id,
+            cliente: dados.cliente,
+            itens: dados.itens,
+            mesa: dados.mesa,
+            status: 'Pendente',
+            criadoEm: new Date().toISOString(),
+          }),
+        }),
+      );
     } catch (sqsError) {
       console.error('Erro ao enviar para SQS:', sqsError);
       // Aqui você pode decidir se quer reverter a operação do DynamoDB
@@ -112,7 +143,7 @@ export const handler = async (event: APIGatewayEvent) => {
         statusCode: 500,
         body: JSON.stringify({
           erro: 'Erro interno',
-          mensagem: 'Pedido salvo, mas falha ao processar fila'
+          mensagem: 'Pedido salvo, mas falha ao processar fila',
         }),
       };
     }
@@ -122,16 +153,16 @@ export const handler = async (event: APIGatewayEvent) => {
       body: JSON.stringify({
         sucesso: true,
         mensagem: 'Pedido criado com sucesso!',
-        id
+        id,
       }),
     };
-
   } catch (error) {
-    console.error('Erro inesperado:', error);    return {
+    console.error('Erro inesperado:', error);
+    return {
       statusCode: 500,
       body: JSON.stringify({
         erro: 'Erro interno do servidor',
-        mensagem: 'Ocorreu um erro inesperado ao processar o pedido'
+        mensagem: 'Ocorreu um erro inesperado ao processar o pedido',
       }),
     };
   }

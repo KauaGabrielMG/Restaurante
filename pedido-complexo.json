@@ -1,0 +1,9 @@
+{
+  "cliente": "Maria Santos",
+  "mesa": 12,
+  "itens": [
+    {"nome": "Pizza Margherita", "quantidade": 1, "preco": 35.00},
+    {"nome": "Refrigerante", "quantidade": 2, "preco": 5.50},
+    {"nome": "Sobremesa", "quantidade": 1, "preco": 15.00}
+  ]
+}

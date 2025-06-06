@@ -1,8 +1,8 @@
 {
-  "cliente": "João Silva",
+  "cliente": "João Pedro Sebar Silva",
   "mesa": 5,
   "itens": [
-    {"nome": "Hambúrguer", "quantidade": 2, "preco": 25.90},
-    {"nome": "Batata Frita", "quantidade": 1, "preco": 12.50}
+    { "nome": "Hambúrguer 7", "quantidade": 10, "preco": 25.9 },
+    { "nome": "Batata 2", "quantidade": 1, "preco": 12.5 }
   ]
 }

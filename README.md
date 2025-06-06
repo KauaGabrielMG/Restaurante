@@ -14,7 +14,7 @@
 
 ```bash
 # 1. Iniciar LocalStack
-docker compose up -d
+docker-compose up -d
 
 # 2. Deploy automático
 ./script.sh
@@ -33,12 +33,17 @@ Um sistema completo de gerenciamento de pedidos para restaurantes, desenvolvido 
 
 ## 🏗️ Arquitetura
 
-```
-Cliente → API Gateway → Lambda (CriarPedido) → DynamoDB + SQS
-                                                    ↓
-                                        Lambda (ProcessarPedido) → S3 (PDF) + SNS (Notificação)
-                                                    ↓
-                                              DynamoDB (Status)
+![alt text](diagrama.png)
+
+```mermaid
+graph LR
+    APIGateway --> LambdaCriarPedido
+    LambdaCriarPedido --> DynamoDB
+    LambdaCriarPedido --> SQS
+    SQS --> LambdaProcessarPedido
+    LambdaProcessarPedido --> S3
+    LambdaProcessarPedido --> SNS
+    SNS --> NotificacaoParaCozinha
 ```
 
 ### Componentes:
@@ -49,7 +54,7 @@ Cliente → API Gateway → Lambda (CriarPedido) → DynamoDB + SQS
 - **SQS**: Fila para processamento assíncrono de pedidos
 - **Lambda ProcessarPedido**: Processa pedidos, gera comprovantes PDF, salva no S3 e envia notificações
 - **S3**: Armazena comprovantes em PDF dos pedidos processados
-- **SNS**: Envia notificações quando pedidos são concluídos (simulando alertas para clientes e cozinha)
+- **SNS**: Envia notificações quando pedidos são concluídos (simulando alertas para clientes e cozinha), as notificações ficam disponíveis nos logs do LocalStack (`docker-compose logs localstack | grep -i "sns.*pedidosconcluidos"`)
 
 ## 🚀 Pré-requisitos
 
@@ -97,11 +102,11 @@ winget install Amazon.AWSCLI
 ### Verificação da Instalação:
 
 ```bash
-docker --version          # Docker version 20.10+
-docker-compose --version  # docker-compose version 1.29+
-node --version            # v18.0.0+
-npm --version             # 8.0.0+
-aws --version             # aws-cli/2.0.0+
+docker --version          # Docker version 27.5.1+
+docker-compose --version  # Docker Compose version v2.33.1+
+node --version            # v18.19.1+
+npm --version             # 11.3.0+
+aws --version             # aws-cli/2.27.19+
 ```
 
 ## ⚙️ Configuração e Execução Completa
@@ -110,14 +115,16 @@ aws --version             # aws-cli/2.0.0+
 
 ```bash
 # Clone ou navegue para o projeto
-cd /mnt/c/Users/kaua/Desktop/faculdade/Restaurante
+git clone https://github.com/KauaGabrielMG/Restaurante.git
+
+# Navegar para o diretório do projeto
+cd Restaurante
 
 # Verificar se todas as dependências estão instaladas
-docker --version && node --version && aws --version
+docker --version && docker-compose --version && node --version && npm --version && aws --version
 
 # Configurar permissões de execução dos scripts
-chmod +x script.sh
-chmod +x remover-recursos-aws.sh
+chmod +x *.sh
 ```
 
 ### 2. Iniciar LocalStack
@@ -130,7 +137,7 @@ docker compose up -d
 docker ps | grep localstack
 
 # Ver logs do LocalStack (opcional)
-docker compose logs -f localstack
+docker-compose logs -f localstack
 ```
 
 ### 3. Deploy Automático
@@ -169,9 +176,6 @@ POST http://172.x.x.x:4566/restapis/xxxxxxxxxx/local/_user_request_/pedidos
 Para testar rapidamente todo o sistema:
 
 ```bash
-# Dar permissão de execução
-chmod +x testar-sistema.sh
-
 # Executar todos os testes
 ./testar-sistema.sh
 ```
@@ -185,18 +189,41 @@ O script de teste irá:
 - ✅ Verificar se dados foram salvos no DynamoDB
 - ✅ Validar se todos os recursos AWS foram criados
 - ✅ Verificar se notificações SNS foram enviadas
+- ✅ Testar notificações SNS manuais
+- ✅ Validar atributos do tópico SNS
+- ✅ Simular notificações de pedidos prontos
+
+### 📧 Teste Específico do SNS
+
+Para testar apenas o sistema de notificações SNS:
+
+```bash
+# Executar testes específicos do SNS
+./testar-sns.sh
+```
+
+O script de teste SNS irá:
+
+- ✅ Verificar se tópico SNS existe
+- ✅ Obter atributos do tópico
+- ✅ Enviar notificação simples
+- ✅ Enviar notificação com atributos personalizados
+- ✅ Verificar logs de notificações
+- ✅ Simular múltiplas notificações (teste de carga)
+- ✅ Verificar estatísticas do tópico
+- ✅ Testar notificações de erro
 
 ## 📋 Checklist de Validação
 
 Após executar `./script.sh`, verifique:
 
 - [ ] LocalStack rodando: `docker ps | grep localstack`
-- [ ] Tabela DynamoDB criada: `aws --endpoint-url=http://IP:4566 dynamodb list-tables`
-- [ ] Fila SQS criada: `aws --endpoint-url=http://IP:4566 sqs list-queues`
-- [ ] Bucket S3 criado: `aws --endpoint-url=http://IP:4566 s3 ls`
-- [ ] Tópico SNS criado: `aws --endpoint-url=http://IP:4566 sns list-topics`
-- [ ] Lambdas deployadas: `aws --endpoint-url=http://IP:4566 lambda list-functions`
-- [ ] API Gateway funcionando: teste com curl ou Postman
+- [ ] Tabela DynamoDB criada: `aws --endpoint-url=http://$IP:4566 dynamodb list-tables`
+- [ ] Fila SQS criada: `aws --endpoint-url=http://$IP:4566 sqs list-queues`
+- [ ] Bucket S3 criado: `aws --endpoint-url=http://$IP:4566 s3 ls`
+- [ ] Tópico SNS criado: `aws --endpoint-url=http://$IP:4566 sns list-topics`
+- [ ] Lambdas deployadas: `aws --endpoint-url=http://$IP:4566 lambda list-functions`
+- [ ] API Gateway funcionando: teste com `curl` ou Postman
 
 ## 🧪 Como Testar o Sistema
 
@@ -231,6 +258,9 @@ curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedi
 }
 ```
 
+> [!NOTE]
+> O ID será gerado automaticamente e pode variar
+
 ### Teste 2: Pedido Complexo
 
 ```bash
@@ -258,11 +288,6 @@ curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedi
 curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedidos \
   -H "Content-Type: application/json" \
   -d '{"mesa": 5, "itens": []}'
-
-# Teste com JSON malformado (deve retornar erro 400)
-curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedidos \
-  -H "Content-Type: application/json" \
-  -d '{"cliente": "João", mesa": 5}'
 ```
 
 **Resposta de erro esperada:**
@@ -274,13 +299,30 @@ curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedi
 }
 ```
 
+```bash
+
+# Teste com JSON malformado (deve retornar erro 400)
+curl -X POST http://172.x.x.x:4566/restapis/XXXXXXXXXX/local/_user_request_/pedidos \
+  -H "Content-Type: application/json" \
+  -d '{"cliente": "João", mesa": 5}'
+```
+
+**Resposta de erro esperada:**
+
+```json
+{
+  "erro": "JSON inválido",
+  "mensagem": "Formato do JSON está incorreto"
+}
+```
+
 ## 📊 Monitoramento e Verificação
 
 ### Verificar Recursos Criados
 
 ```bash
 # Configurar endpoint para comandos AWS
-export AWS_ENDPOINT_URL=http://172.x.x.x:4566
+export AWS_ENDPOINT_URL=http://$IP:4566
 
 # Listar tabelas DynamoDB
 aws --endpoint-url=$AWS_ENDPOINT_URL dynamodb list-tables
@@ -524,6 +566,51 @@ awslocal s3 ls s3://comprovantes/
 ```bash
 # Verificar logs de notificações
 docker compose logs localstack | grep -A5 -B5 "PedidosConcluidos"
+```
+
+### 📧 Exemplo de Notificação SNS Enviada
+
+Quando um pedido é processado, o sistema envia uma notificação como esta:
+
+```json
+{
+  "TopicArn": "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos",
+  "Message": "Pedido 550e8400-e29b-41d4-a716-446655440000 foi processado e está pronto! Cliente: João Silva, Mesa: 5, Total: R$ 64,30",
+  "Subject": "🍽️ Pedido Pronto para Retirada!",
+  "MessageAttributes": {
+    "pedidoId": {
+      "DataType": "String",
+      "StringValue": "550e8400-e29b-41d4-a716-446655440000"
+    },
+    "cliente": {
+      "DataType": "String",
+      "StringValue": "João Silva"
+    },
+    "mesa": {
+      "DataType": "Number",
+      "StringValue": "5"
+    },
+    "total": {
+      "DataType": "Number",
+      "StringValue": "64.30"
+    }
+  }
+}
+```
+
+### 🧪 Teste Manual do SNS
+
+Para testar manualmente o sistema SNS:
+
+```bash
+# Enviar notificação de teste
+aws --endpoint-url=http://172.x.x.x:4566 sns publish \
+  --topic-arn "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos" \
+  --message "Teste de notificação manual" \
+  --subject "🧪 Teste SNS"
+
+# Verificar se a mensagem foi processada
+docker compose logs localstack | grep -i "sns.*publish" | tail -5
 ```
 
 ## 🧪 Exemplo de Payload
