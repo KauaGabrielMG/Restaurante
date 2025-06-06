@@ -60,7 +60,8 @@ graph LR
 
 ### Obrigatórios:
 
-- **Docker** e **docker-compose** (versão 20+)
+- **Docker** (versão 27+)
+- **docker-compose** (versão 2+)
 - **Node.js** (versão 18+)
 - **npm** (incluído com Node.js)
 - **AWS CLI** (versão 2+)
@@ -102,11 +103,11 @@ winget install Amazon.AWSCLI
 ### Verificação da Instalação:
 
 ```bash
-docker --version          # Docker version 20.10+
-docker-compose --version  # docker-compose version 1.29+
-node --version            # v18.0.0+
-npm --version             # 8.0.0+
-aws --version             # aws-cli/2.0.0+
+docker --version          # Docker version 27.5.1+
+docker-compose --version  # docker-compose version 2.33.1+
+node --version            # v18.19.1+
+npm --version             # 11.3.0+
+aws --version             # aws-cli/2.27.19+
 ```
 
 ## ⚙️ Configuração e Execução Completa
