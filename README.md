@@ -16,6 +16,9 @@
 # 1. Iniciar LocalStack
 docker-compose up -d
 
+# Dar permissão de execução aos scripts
+chmod +x *.sh
+
 # 2. Deploy automático
 ./script.sh
 
@@ -23,7 +26,6 @@ docker-compose up -d
 ./testar-sistema.sh
 
 # 4. Ver status completo
-chmod +x *.sh
 ./status-sistema.sh
 ```
 
