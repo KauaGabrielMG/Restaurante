@@ -123,9 +123,6 @@ cd Restaurante
 
 # Verificar se todas as dependências estão instaladas
 docker --version && docker-compose --version && node --version && npm --version && aws --version
-
-# Configurar permissões de execução dos scripts
-chmod +x *.sh
 ```
 
 ### 2. Iniciar LocalStack
@@ -586,6 +583,58 @@ awslocal s3 ls s3://comprovantes/
 ```bash
 # Verificar logs de notificações
 docker-compose logs localstack | grep -A5 -B5 "PedidosConcluidos"
+```
+
+### 📧 Sistema de Notificações SNS Completo
+
+O sistema implementa notificações automáticas via SNS para alertar sobre eventos do pedido:
+
+#### Tipos de Notificações:
+
+1. **Pedido Pronto para Retirada** (`PEDIDO_PRONTO`)
+
+   - Enviada quando o pedido é processado
+   - Inclui detalhes completos do pedido
+   - Direcionada ao cliente
+
+2. **Alerta para Cozinha** (`ALERTA_COZINHA`)
+
+   - Notifica a equipe sobre pedidos processados
+   - Inclui informações operacionais
+   - Direcionada à equipe
+
+3. **Notificações de Erro** (`ERRO_PROCESSAMENTO`)
+   - Alertas sobre falhas no sistema
+   - Prioridade alta para ação imediata
+   - Direcionada ao suporte técnico
+
+#### Formato das Notificações:
+
+```json
+{
+  "TopicArn": "arn:aws:sns:us-east-1:000000000000:PedidosConcluidos",
+  "Message": "{\"pedidoId\":\"12345\",\"cliente\":\"João Silva\",\"status\":\"PRONTO\"}",
+  "Subject": "🍽️ Pedido Pronto para Retirada!",
+  "MessageAttributes": {
+    "pedidoId": { "DataType": "String", "StringValue": "12345" },
+    "tipo": { "DataType": "String", "StringValue": "PEDIDO_PRONTO" },
+    "cliente": { "DataType": "String", "StringValue": "João Silva" }
+  }
+}
+```
+
+#### Como Testar Notificações:
+
+```bash
+# Demonstração completa das notificações
+chmod +x demonstrar-sns.sh
+./demonstrar-sns.sh
+
+# Teste específico do SNS
+./testar-sns.sh
+
+# Verificar notificações nos logs
+docker logs $(docker ps -q --filter 'name=localstack') | grep -i sns
 ```
 
 ### 📧 Exemplo de Notificação SNS Enviada

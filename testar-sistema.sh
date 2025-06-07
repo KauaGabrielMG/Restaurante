@@ -260,11 +260,11 @@ fi
 # Teste 5c: Verificar logs SNS
 echo "5c. Verificando logs de notificações SNS..."
 sleep 2
-SNS_LOGS_COUNT=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
+SNS_LOGS_COUNT=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
 if [ "$SNS_LOGS_COUNT" -gt 0 ]; then
     echo "✅ Teste 5c PASSOU - $SNS_LOGS_COUNT notificações SNS encontradas nos logs"
     echo "📧 Últimas 3 notificações SNS:"
-    docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish" | tail -3 | while read line; do
+    docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | tail -3 | while read line; do
         echo "  📧 $(echo $line | cut -c1-80)..."
     done
 else
@@ -289,7 +289,7 @@ if [ ! -z "$PEDIDO_ID" ]; then
 
         # Verificar se há notificações SNS relacionadas a este pedido nos logs
         echo "Verificando notificações SNS automáticas para o pedido $PEDIDO_ID..."
-        SNS_AUTO_LOGS=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish" | tail -20 || true)
+        SNS_AUTO_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | tail -20 || true)
         SNS_AUTO_COUNT=$(echo "$SNS_AUTO_LOGS" | wc -l || echo "0")
 
         if [ "$SNS_AUTO_COUNT" -gt 0 ]; then
@@ -314,7 +314,7 @@ if [ ! -z "$PEDIDO_ID" ]; then
 
     # Verificar logs do SNS (notificações enviadas automaticamente pela Lambda)
     echo "Verificando notificações SNS automáticas enviadas pela Lambda ProcessarPedido..."
-    SNS_LAMBDA_LOGS=$(docker logs restaurante_localstack_1 2>&1 | grep -A 5 -B 5 "ProcessarPedido.*sns\|sns.*ProcessarPedido" | tail -10 || true)
+    SNS_LAMBDA_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -A 5 -B 5 "ProcessarPedido.*sns\|sns.*ProcessarPedido" | tail -10 || true)
     if [ ! -z "$SNS_LAMBDA_LOGS" ]; then
         echo "✅ Teste 6c PASSOU - Lambda ProcessarPedido enviou notificações SNS automaticamente"
         echo "📧 Logs da integração Lambda + SNS:"
@@ -326,7 +326,7 @@ if [ ! -z "$PEDIDO_ID" ]; then
         echo "💡 Verificando logs gerais do SNS para este período..."
 
         # Verificar logs SNS gerais nas últimas interações
-        RECENT_SNS=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish" | tail -5 || true)
+        RECENT_SNS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | tail -5 || true)
         if [ ! -z "$RECENT_SNS" ]; then
             echo "✅ Notificações SNS recentes encontradas:"
             echo "$RECENT_SNS" | while read line; do
@@ -421,7 +421,7 @@ echo ""
 echo "🧪 Teste 9: Verificar histórico de mensagens SNS nos logs"
 
 echo "Verificando últimas 10 mensagens SNS nos logs do LocalStack..."
-SNS_HISTORY=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish\|pedidosconcluidos" | tail -10 || true)
+SNS_HISTORY=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish\|pedidosconcluidos" | tail -10 || true)
 
 if [ ! -z "$SNS_HISTORY" ]; then
     echo "✅ Teste 9 PASSOU - Histórico de mensagens SNS encontrado"
@@ -431,7 +431,7 @@ if [ ! -z "$SNS_HISTORY" ]; then
     done
 
     # Contar total de mensagens SNS
-    TOTAL_SNS=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
+    TOTAL_SNS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
     echo "📊 Total de mensagens SNS enviadas: $TOTAL_SNS"
 else
     echo "❌ Teste 9 FALHOU - Nenhum histórico de mensagens SNS encontrado"
@@ -442,7 +442,7 @@ echo "🧪 Teste 10: Verificar se SNS está recebendo notificações da Lambda P
 
 # Verificar logs específicos da Lambda ProcessarPedido relacionados ao SNS
 echo "Verificando notificações SNS enviadas pela Lambda ProcessarPedido..."
-LAMBDA_SNS_LOGS=$(docker logs restaurante_localstack_1 2>&1 | grep -i "processarpedido.*sns\|sns.*processarpedido" | tail -5 || true)
+LAMBDA_SNS_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "processarpedido.*sns\|sns.*processarpedido" | tail -5 || true)
 
 if [ ! -z "$LAMBDA_SNS_LOGS" ]; then
     echo "✅ Teste 10 PASSOU - Lambda ProcessarPedido está enviando notificações SNS"

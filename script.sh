@@ -363,3 +363,10 @@ echo "🧪 Para testar, execute:"
 echo 'curl -X POST http://'$ETH0_IP':4566/restapis/'$API_ID'/local/_user_request_/pedidos \'
 echo '  -H "Content-Type: application/json" \'
 echo '  -d "{\"cliente\":\"João\",\"itens\":[{\"nome\":\"Pizza\",\"quantidade\":1,\"preco\":25.99}],\"mesa\":5}"'
+echo ""
+echo "📧 Para testar notificações SNS:"
+echo "  ./demonstrar-sns.sh    # Demonstração completa"
+echo "  ./testar-sns.sh        # Testes específicos"
+
+# Tornar scripts executáveis
+chmod +x *.sh

@@ -92,20 +92,29 @@ export const handler = async (event: SQSEvent) => {
       const total = pedido.itens.reduce(
         (sum, item) => sum + item.quantidade * item.preco,
         0,
-      );
+      ); // 4. Enviar notificações via SNS
+      console.log('📧 Enviando notificações via SNS...');
 
-      // 4. Enviar notificação via SNS
-      console.log('📧 Enviando notificação via SNS...');
+      // Notificação principal - Pedido Pronto
+      const mensagemPrincipal = JSON.stringify({
+        pedidoId: pedido.id,
+        cliente: pedido.cliente,
+        mesa: pedido.mesa,
+        status: 'PRONTO',
+        total: total.toFixed(2),
+        itens: pedido.itens.map((item) => ({
+          nome: item.nome,
+          quantidade: item.quantidade,
+          preco: item.preco,
+        })),
+        timestamp: new Date().toISOString(),
+        comprovanteS3: s3Key,
+        mensagem: `Seu pedido está pronto para retirada na mesa ${pedido.mesa}!`,
+      });
 
-      const mensagem = `Pedido ${
-        pedido.id
-      } foi processado e está pronto! Cliente: ${pedido.cliente}, Mesa: ${
-        pedido.mesa
-      }, Total: R$ ${total.toFixed(2)}`;
-
-      const snsParams = {
+      const snsParamsPrincipal = {
         TopicArn: TOPIC_ARN,
-        Message: mensagem,
+        Message: mensagemPrincipal,
         Subject: '🍽️ Pedido Pronto para Retirada!',
         MessageAttributes: {
           pedidoId: {
@@ -124,16 +133,88 @@ export const handler = async (event: SQSEvent) => {
             DataType: 'Number',
             StringValue: total.toFixed(2),
           },
+          status: {
+            DataType: 'String',
+            StringValue: 'PRONTO',
+          },
+          tipo: {
+            DataType: 'String',
+            StringValue: 'PEDIDO_PRONTO',
+          },
         },
       };
+      const snsResult = await snsClient.send(
+        new PublishCommand(snsParamsPrincipal),
+      );
+      console.log(
+        '✅ Notificação SNS principal enviada:',
+        JSON.stringify(
+          {
+            MessageId: snsResult.MessageId,
+            TopicArn: TOPIC_ARN,
+            Subject: '🍽️ Pedido Pronto para Retirada!',
+            PedidoId: pedido.id,
+            Cliente: pedido.cliente,
+            Mesa: pedido.mesa,
+            Total: total.toFixed(2),
+          },
+          null,
+          2,
+        ),
+      );
 
-      const snsResult = await snsClient.send(new PublishCommand(snsParams));
-      console.log('✅ Notificação SNS enviada:', {
-        MessageId: snsResult.MessageId,
-        TopicArn: TOPIC_ARN,
-        Subject: '🍽️ Pedido Pronto para Retirada!',
-        Message: mensagem,
+      // Notificação adicional para cozinha/staff
+      const mensagemCozinha = JSON.stringify({
+        tipo: 'ALERTA_COZINHA',
+        pedidoId: pedido.id,
+        mesa: pedido.mesa,
+        cliente: pedido.cliente,
+        quantidadeItens: pedido.itens.length,
+        tempoProcessamento: new Date().toISOString(),
+        acao: 'Pedido processado e comprovante gerado',
       });
+
+      const snsParamsCozinha = {
+        TopicArn: TOPIC_ARN,
+        Message: mensagemCozinha,
+        Subject: '👨‍🍳 Pedido Processado - Alerta Cozinha',
+        MessageAttributes: {
+          pedidoId: {
+            DataType: 'String',
+            StringValue: pedido.id,
+          },
+          tipo: {
+            DataType: 'String',
+            StringValue: 'ALERTA_COZINHA',
+          },
+          mesa: {
+            DataType: 'Number',
+            StringValue: pedido.mesa.toString(),
+          },
+          prioridade: {
+            DataType: 'String',
+            StringValue: 'NORMAL',
+          },
+        },
+      };
+      const snsResultCozinha = await snsClient.send(
+        new PublishCommand(snsParamsCozinha),
+      );
+      console.log(
+        '✅ Notificação SNS para cozinha enviada:',
+        JSON.stringify(
+          {
+            MessageId: snsResultCozinha.MessageId,
+            TopicArn: TOPIC_ARN,
+            Subject: '👨‍🍳 Pedido Processado - Alerta Cozinha',
+            Tipo: 'ALERTA_COZINHA',
+            PedidoId: pedido.id,
+            Mesa: pedido.mesa,
+          },
+          null,
+          2,
+        ),
+      );
 
       // 5. Atualizar status no DynamoDB
       console.log('🔄 Atualizando status no DynamoDB...');

@@ -170,7 +170,7 @@ echo "📧 Teste 5: Verificar logs de notificações no LocalStack"
 echo "Verificando últimas notificações SNS nos logs..."
 sleep 2  # Aguardar logs serem processados
 
-SNS_LOGS=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish\|pedidosconcluidos" | tail -15 || true)
+SNS_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish\|pedidosconcluidos" | tail -15 || true)
 
 if [ ! -z "$SNS_LOGS" ]; then
     echo "✅ Logs de notificações SNS encontrados"
@@ -277,7 +277,7 @@ echo ""
 echo "📧 Teste Final: Verificar logs finais e resumo"
 
 sleep 2
-FINAL_LOGS=$(docker logs restaurante_localstack_1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
+FINAL_LOGS=$(docker logs restaurante-localstack-1 2>&1 | grep -i "sns.*publish" | wc -l || echo "0")
 echo "📊 Total de mensagens SNS enviadas nos logs: $FINAL_LOGS"
 
 echo ""
@@ -294,7 +294,7 @@ echo "  ✅ Estatísticas do tópico"
 echo "  ✅ Notificação de erro"
 echo ""
 echo "💡 Para ver todas as notificações nos logs:"
-echo "   docker logs restaurante_localstack_1 2>&1 | grep -i sns"
+echo "   docker logs restaurante-localstack-1 2>&1 | grep -i sns"
 echo ""
 echo "💡 Para listar todos os tópicos:"
 echo "   aws --endpoint-url=$ENDPOINT_URL sns list-topics"
