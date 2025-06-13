@@ -120,20 +120,21 @@ mkdir -p lambda-bundle/node_modules
 
 # Instalar apenas dependências de produção no diretório temporário
 cd lambda-bundle
+rm package.json package-lock.json .npmrc 2>/dev/null || true
 npm init -y > /dev/null 2>&1
 
 # Copiar configuração otimizada
 cp ../.npmrc-lambda .npmrc
+cp ../package.json package.json
+# Instalar dependências de desenvolvimento necessárias para compilação
+npm cache clean --force
+npm ci --production > /dev/null 2>/dev/null || true
+if [ $? -ne 0 ]; then
+    echo "❌ Erro ao instalar dependências npm. Verifique o package.json."
+    exit 1
+fi
 
-# Instalar dependências otimizadas (apenas runtime, sem dev dependencies)
-npm install --production --no-optional --no-audit --no-fund \
-  @aws-sdk/client-dynamodb@^3.600.0 \
-  @aws-sdk/lib-dynamodb@^3.600.0 \
-  @aws-sdk/client-sqs@^3.600.0 \
-  @aws-sdk/client-s3@^3.600.0 \
-  @aws-sdk/client-sns@^3.600.0 \
-  jspdf@^3.0.1 \
-  uuid@^9.0.0 > /dev/null 2>&1
+
 
 # Remover arquivos desnecessários para reduzir ainda mais o tamanho
 echo "    🧹 Removendo arquivos desnecessários..."
