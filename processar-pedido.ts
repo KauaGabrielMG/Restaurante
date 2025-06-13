@@ -92,8 +92,63 @@ export const handler = async (event: SQSEvent) => {
       const total = pedido.itens.reduce(
         (sum, item) => sum + item.quantidade * item.preco,
         0,
-      ); // 4. Enviar notificações via SNS
+      );
+
+      // 4. Enviar notificações via SNS
       console.log('📧 Enviando notificações via SNS...');
+
+      // Notificação adicional para cozinha/staff
+      const mensagemCozinha = JSON.stringify({
+        tipo: 'ALERTA_COZINHA',
+        pedidoId: pedido.id,
+        mesa: pedido.mesa,
+        cliente: pedido.cliente,
+        quantidadeItens: pedido.itens.length,
+        tempoProcessamento: new Date().toISOString(),
+        acao: 'Pedido processado e comprovante gerado',
+      });
+
+      const snsParamsCozinha = {
+        TopicArn: TOPIC_ARN,
+        Message: mensagemCozinha,
+        Subject: '👨‍🍳 Pedido Processado - Alerta Cozinha',
+        MessageAttributes: {
+          pedidoId: {
+            DataType: 'String',
+            StringValue: pedido.id,
+          },
+          tipo: {
+            DataType: 'String',
+            StringValue: 'ALERTA_COZINHA',
+          },
+          mesa: {
+            DataType: 'Number',
+            StringValue: pedido.mesa.toString(),
+          },
+          prioridade: {
+            DataType: 'String',
+            StringValue: 'NORMAL',
+          },
+        },
+      };
+      const snsResultCozinha = await snsClient.send(
+        new PublishCommand(snsParamsCozinha),
+      );
+      console.log(
+        '✅ Notificação SNS para cozinha enviada:',
+        JSON.stringify(
+          {
+            MessageId: snsResultCozinha.MessageId,
+            TopicArn: TOPIC_ARN,
+            Subject: '👨‍🍳 Pedido Processado - Alerta Cozinha',
+            Tipo: 'ALERTA_COZINHA',
+            PedidoId: pedido.id,
+            Mesa: pedido.mesa,
+          },
+          null,
+          2,
+        ),
+      );
 
       // Notificação principal - Pedido Pronto
       const mensagemPrincipal = JSON.stringify({
@@ -157,59 +212,6 @@ export const handler = async (event: SQSEvent) => {
             Cliente: pedido.cliente,
             Mesa: pedido.mesa,
             Total: total.toFixed(2),
-          },
-          null,
-          2,
-        ),
-      );
-
-      // Notificação adicional para cozinha/staff
-      const mensagemCozinha = JSON.stringify({
-        tipo: 'ALERTA_COZINHA',
-        pedidoId: pedido.id,
-        mesa: pedido.mesa,
-        cliente: pedido.cliente,
-        quantidadeItens: pedido.itens.length,
-        tempoProcessamento: new Date().toISOString(),
-        acao: 'Pedido processado e comprovante gerado',
-      });
-
-      const snsParamsCozinha = {
-        TopicArn: TOPIC_ARN,
-        Message: mensagemCozinha,
-        Subject: '👨‍🍳 Pedido Processado - Alerta Cozinha',
-        MessageAttributes: {
-          pedidoId: {
-            DataType: 'String',
-            StringValue: pedido.id,
-          },
-          tipo: {
-            DataType: 'String',
-            StringValue: 'ALERTA_COZINHA',
-          },
-          mesa: {
-            DataType: 'Number',
-            StringValue: pedido.mesa.toString(),
-          },
-          prioridade: {
-            DataType: 'String',
-            StringValue: 'NORMAL',
-          },
-        },
-      };
-      const snsResultCozinha = await snsClient.send(
-        new PublishCommand(snsParamsCozinha),
-      );
-      console.log(
-        '✅ Notificação SNS para cozinha enviada:',
-        JSON.stringify(
-          {
-            MessageId: snsResultCozinha.MessageId,
-            TopicArn: TOPIC_ARN,
-            Subject: '👨‍🍳 Pedido Processado - Alerta Cozinha',
-            Tipo: 'ALERTA_COZINHA',
-            PedidoId: pedido.id,
-            Mesa: pedido.mesa,
           },
           null,
           2,
